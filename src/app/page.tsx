@@ -308,8 +308,10 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
     }
   }
 
-  // Verificar status por email - CORRIGIDO
+  // Verificar status por email - CORRIGIDO para não buscar automaticamente
   const checkStatusByEmail = async (email: string) => {
+    if (!email.trim()) return
+    
     setIsCheckingStatus(true)
     setStatusGuest(null) // Limpar resultado anterior
     
@@ -572,7 +574,7 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
     }
   }
 
-  // Iniciar scanner de câmera - CORRIGIDO COM QR-SCANNER
+  // Iniciar scanner de câmera - CORRIGIDO COM REINICIALIZAÇÃO
   const startCameraScanner = async () => {
     try {
       setCameraError('')
@@ -590,6 +592,12 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
         throw new Error('Elemento de vídeo não encontrado')
       }
 
+      // Parar scanner anterior se existir
+      if (qrScannerRef.current) {
+        qrScannerRef.current.destroy()
+        qrScannerRef.current = null
+      }
+
       // Criar instância do QrScanner
       qrScannerRef.current = new QrScanner(
         videoRef.current,
@@ -600,6 +608,13 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
           if (result.data !== lastScannedCode) {
             setLastScannedCode(result.data)
             processQRCode(result.data)
+            
+            // Reiniciar scanner após processamento
+            setTimeout(() => {
+              if (qrScannerRef.current) {
+                qrScannerRef.current.start()
+              }
+            }, 2000)
           }
         },
         {
@@ -942,7 +957,7 @@ Vai ser incrível! 🎵`
     )
   }
 
-  // Tela de Verificação de Status - MELHORADA
+  // Tela de Verificação de Status - MELHORADA SEM BUSCA AUTOMÁTICA
   if (currentScreen === 'status') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-100 text-gray-900 p-4">
@@ -953,7 +968,7 @@ Vai ser incrível! 🎵`
                 <Search className="w-7 h-7 text-blue-600" />
                 Ver meu QR Code
               </CardTitle>
-              <p className="text-gray-600 mt-2">Digite o email que você usou para se inscrever</p>
+              <p className="text-gray-600 mt-2">Digite o email que você usou para se inscrever e clique na lupa</p>
             </CardHeader>
             <CardContent className="p-6 space-y-6">
               <div>
