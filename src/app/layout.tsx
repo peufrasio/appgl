@@ -17,8 +17,27 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Criado com a Lasy",
-  description: "Projeto criado com Lasy AI",
+  title: "Gravação EP Apaixonado Como Nunca - EscalaMusic",
+  description: "Confirme sua presença na gravação do EP 'Apaixonado Como Nunca' - 09/10 às 15h na Prainha Natal. Sistema de confirmação e check-in para convidados.",
+  keywords: "EscalaMusic, EP, Apaixonado Como Nunca, gravação, música, evento, Natal, confirmação presença",
+  authors: [{ name: "EscalaMusic" }],
+  creator: "EscalaMusic",
+  publisher: "EscalaMusic",
+  robots: "index, follow",
+  openGraph: {
+    title: "Gravação EP Apaixonado Como Nunca - EscalaMusic",
+    description: "Confirme sua presença na gravação do EP 'Apaixonado Como Nunca' - 09/10 às 15h na Prainha Natal",
+    type: "website",
+    locale: "pt_BR",
+    siteName: "EscalaMusic",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Gravação EP Apaixonado Como Nunca - EscalaMusic",
+    description: "Confirme sua presença na gravação do EP 'Apaixonado Como Nunca' - 09/10 às 15h na Prainha Natal",
+  },
+  viewport: "width=device-width, initial-scale=1",
+  themeColor: "#667eea",
 };
 
 export default function RootLayout({
