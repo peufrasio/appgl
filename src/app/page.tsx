@@ -43,7 +43,9 @@ import {
   Loader2,
   CameraOff,
   Zap,
-  Search
+  Search,
+  Navigation,
+  ExternalLink
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -136,7 +138,7 @@ export default function EventApp() {
     location: settings.event_location,
     address: settings.event_address,
     whatsapp: '(11) 99635-9550',
-    email: 'contato@escalamusic.com.br'
+    email: 'gabriellima.art@gabriellima.art'
   }
 
   // Inicializar banco de dados
@@ -239,25 +241,30 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
     }
   }
 
-  // Verificar status por email
+  // Verificar status por email - CORRIGIDO
   const checkStatusByEmail = async (email: string) => {
     setIsCheckingStatus(true)
+    setStatusGuest(null) // Limpar resultado anterior
+    
     try {
       const { data, error } = await supabase
         .from('guests')
         .select('*')
         .eq('email', email.toLowerCase().trim())
-        .single()
 
       if (error) {
-        if (error.code === 'PGRST116') {
-          setStatusGuest(null)
-          return
-        }
+        console.error('Erro ao verificar status:', error)
         throw error
       }
 
-      setStatusGuest(data)
+      // Se não encontrou nenhum resultado
+      if (!data || data.length === 0) {
+        setStatusGuest(null)
+        return
+      }
+
+      // Pegar o primeiro resultado (mais recente)
+      setStatusGuest(data[0])
     } catch (error) {
       console.error('Erro ao verificar status:', error)
       alert('Erro ao verificar status. Tente novamente.')
@@ -293,7 +300,7 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
     }
   }
 
-  // Enviar email com QR Code
+  // Enviar email com QR Code - CORRIGIDO
   const sendEmailWithQRCode = async (guest: Guest, qrCode: string) => {
     try {
       setIsSendingEmail(true)
@@ -496,13 +503,8 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
     }
   }
 
-  // Iniciar scanner de câmera
+  // Iniciar scanner de câmera - CORRIGIDO
   const startCameraScanner = async () => {
-    if (!videoRef.current) {
-      setCameraError('Elemento de vídeo não encontrado')
-      return
-    }
-
     try {
       setCameraError('')
       setIsCameraActive(true)
@@ -510,6 +512,13 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
       // Verificar se o navegador suporta getUserMedia
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Câmera não suportada neste navegador')
+      }
+
+      // Aguardar o elemento de vídeo estar disponível
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      if (!videoRef.current) {
+        throw new Error('Elemento de vídeo não encontrado')
       }
 
       // Solicitar acesso à câmera
@@ -526,9 +535,6 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
       await videoRef.current.play()
 
       console.log('Câmera iniciada com sucesso')
-      
-      // Instruções para o usuário
-      alert('Câmera ativada! Aponte para o QR Code e use o campo manual abaixo para inserir o código quando necessário.')
       
     } catch (error) {
       console.error('Erro ao iniciar câmera:', error)
@@ -656,6 +662,18 @@ Vai ser incrível! 🎵`
     window.open(url, '_blank')
   }
 
+  // Abrir no Waze
+  const openInWaze = () => {
+    const wazeUrl = `https://waze.com/ul?q=${encodeURIComponent(eventInfo.address)}`
+    window.open(wazeUrl, '_blank')
+  }
+
+  // Abrir no Google Maps
+  const openInGoogleMaps = () => {
+    const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(eventInfo.address)}`
+    window.open(mapsUrl, '_blank')
+  }
+
   // Tela de Boas-Vindas
   if (currentScreen === 'welcome') {
     return (
@@ -694,9 +712,33 @@ Vai ser incrível! 🎵`
                     <div className="p-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full shadow-lg">
                       <MapPin className="w-6 h-6 text-white mt-1" />
                     </div>
-                    <div>
+                    <div className="flex-1">
                       <p className="font-bold text-lg sm:text-xl mb-2 text-gray-900">{eventInfo.location}</p>
-                      <p className="text-gray-600 text-sm sm:text-base">{eventInfo.address}</p>
+                      <p className="text-gray-600 text-sm sm:text-base mb-4">{eventInfo.address}</p>
+                      
+                      {/* Botões de Navegação */}
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <Button
+                          onClick={openInWaze}
+                          size="sm"
+                          className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
+                        >
+                          <Navigation className="w-4 h-4" />
+                          Abrir no Waze
+                          <ExternalLink className="w-3 h-3" />
+                        </Button>
+                        
+                        <Button
+                          onClick={openInGoogleMaps}
+                          size="sm"
+                          variant="outline"
+                          className="border-blue-500 text-blue-600 hover:bg-blue-50 flex items-center gap-2"
+                        >
+                          <MapPin className="w-4 h-4" />
+                          Google Maps
+                          <ExternalLink className="w-3 h-3" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
 
@@ -708,7 +750,7 @@ Vai ser incrível! 🎵`
                         Vai ser lindo ter você com a gente no EP GL APAIXONADO COMO NUNCA!
                       </p>
                       <p className="text-gray-600 text-base sm:text-lg">
-                        Clique no botão abaixo para confirmar sua presença.
+                        Confirme sua presença ou verifique se já foi aprovado.
                       </p>
                     </div>
 
@@ -728,7 +770,7 @@ Vai ser incrível! 🎵`
                       className="w-full sm:w-auto border-2 border-blue-500 text-blue-600 hover:bg-blue-50 font-semibold px-8 py-6 text-lg rounded-lg shadow-lg hover:shadow-xl transition-all duration-300"
                     >
                       <Search className="w-6 h-6 mr-3" />
-                      Verificar Status
+                      Já me inscrevi - Ver meu QR Code
                     </Button>
 
                     {settings.whatsapp_group_link && (
@@ -791,7 +833,7 @@ Vai ser incrível! 🎵`
     )
   }
 
-  // Tela de Verificação de Status
+  // Tela de Verificação de Status - MELHORADA
   if (currentScreen === 'status') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-100 text-gray-900 p-4">
@@ -800,13 +842,13 @@ Vai ser incrível! 🎵`
             <CardHeader className="text-center">
               <CardTitle className="text-2xl text-gray-900 flex items-center justify-center gap-3">
                 <Search className="w-7 h-7 text-blue-600" />
-                Verificar Status da Presença
+                Ver meu QR Code
               </CardTitle>
-              <p className="text-gray-600 mt-2">Digite seu email para verificar o status da sua confirmação</p>
+              <p className="text-gray-600 mt-2">Digite o email que você usou para se inscrever</p>
             </CardHeader>
             <CardContent className="p-6 space-y-6">
               <div>
-                <Label htmlFor="status-email">Email usado na confirmação</Label>
+                <Label htmlFor="status-email">Email da inscrição</Label>
                 <div className="flex gap-2 mt-1">
                   <Input
                     id="status-email"
@@ -909,7 +951,7 @@ Vai ser incrível! 🎵`
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    Nenhuma confirmação encontrada para este email. Verifique se digitou corretamente ou confirme sua presença primeiro.
+                    Nenhuma inscrição encontrada para este email. Verifique se digitou corretamente ou faça sua inscrição primeiro.
                   </AlertDescription>
                 </Alert>
               )}
@@ -929,7 +971,7 @@ Vai ser incrível! 🎵`
                   className="flex-1 bg-purple-600 hover:bg-purple-700"
                 >
                   <UserPlus className="w-4 h-4 mr-2" />
-                  Confirmar Presença
+                  Fazer Inscrição
                 </Button>
               </div>
             </CardContent>
@@ -1267,12 +1309,12 @@ Vai ser incrível! 🎵`
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {/* Scanner de QR Code com Câmera */}
+                  {/* Scanner de QR Code com Câmera - MELHORADO */}
                   <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
                     <CardContent className="p-6">
                       <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center gap-2">
                         <Zap className="w-5 h-5" />
-                        Scanner de QR Code - Câmera
+                        Scanner de QR Code
                       </h3>
                       
                       <div className="space-y-4">
@@ -1299,13 +1341,14 @@ Vai ser incrível! 🎵`
 
                         {/* Área da Câmera */}
                         {isCameraActive && (
-                          <div className="relative">
+                          <div className="relative bg-black rounded-lg overflow-hidden">
                             <video
                               ref={videoRef}
-                              className="w-full max-w-md mx-auto rounded-lg border-2 border-blue-300 shadow-lg"
+                              className="w-full max-w-md mx-auto rounded-lg"
                               style={{ aspectRatio: '4/3' }}
                               playsInline
                               muted
+                              autoPlay
                             />
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                               <div className="border-2 border-green-400 bg-green-400/20 rounded-lg w-48 h-48 flex items-center justify-center">
@@ -1661,7 +1704,7 @@ Vai ser incrível! 🎵`
                               <div>
                                 <Label>Email de Contato</Label>
                                 <Input
-                                  value="contato@escalamusic.com.br"
+                                  value="gabriellima.art@gabriellima.art"
                                   disabled
                                   className="mt-1 bg-gray-50"
                                 />
@@ -1702,7 +1745,7 @@ Vai ser incrível! 🎵`
                               <div>
                                 <Label>Email Remetente</Label>
                                 <Input
-                                  value="EscalaMusic <noreply@escalamusic.com.br>"
+                                  value="EscalaMusic <gabriellima.art@gabriellima.art>"
                                   disabled
                                   className="mt-1 bg-gray-50"
                                 />
