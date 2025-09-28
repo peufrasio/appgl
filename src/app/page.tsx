@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -11,7 +11,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import QRCode from 'qrcode'
-import QrScanner from 'qr-scanner'
 import { 
   Users, 
   Calendar, 
@@ -39,22 +38,11 @@ import {
   X,
   Shield,
   LogIn,
-  Scan,
-  AlertCircle,
-  Loader2,
-  CameraOff,
-  Zap,
-  Search,
-  Navigation,
-  ExternalLink,
-  Volume2,
-  VolumeX,
-  Trash2,
-  RefreshCw
+  Scan
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
-type Screen = 'welcome' | 'form' | 'success' | 'admin' | 'checkin' | 'status'
+type Screen = 'welcome' | 'form' | 'success' | 'admin' | 'checkin'
 
 interface Guest {
   id: string
@@ -62,15 +50,13 @@ interface Guest {
   name: string
   email: string
   phone: string
-  instagram: string
+  instagram: string | null
   has_companion: boolean
   accepted_terms: boolean
   status: 'pending' | 'approved' | 'rejected'
   qr_code: string | null
   checked_in: boolean
-  updated_at: string | null
-  timestamp: string
-  request_count?: number
+  checked_in_at: string | null
 }
 
 interface AppSettings {
@@ -121,32 +107,8 @@ export default function EventApp() {
   const [isAddingGuest, setIsAddingGuest] = useState(false)
   const [qrScannerOpen, setQrScannerOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [tempSettings, setTempSettings] = useState<AppSettings>(settings)
+  const [tempGroupLink, setTempGroupLink] = useState('')
   const [termsText, setTermsText] = useState('')
-  const [qrScanInput, setQrScanInput] = useState('')
-  const [isSendingEmail, setIsSendingEmail] = useState(false)
-  
-  // Estados para o scanner de QR Code
-  const [isCameraActive, setIsCameraActive] = useState(false)
-  const [cameraError, setCameraError] = useState('')
-  const [lastScannedCode, setLastScannedCode] = useState('')
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const qrScannerRef = useRef<QrScanner | null>(null)
-
-  // Estados para verificação de status
-  const [statusEmail, setStatusEmail] = useState('')
-  const [statusGuest, setStatusGuest] = useState<Guest | null>(null)
-  const [isCheckingStatus, setIsCheckingStatus] = useState(false)
-  const [statusError, setStatusError] = useState('')
-
-  // Estados para acesso administrativo via URL
-  const [showAdminAccess, setShowAdminAccess] = useState(false)
-
-  // Estados para sons
-  const [soundEnabled, setSoundEnabled] = useState(true)
-
-  // Estados para seleção múltipla no admin
-  const [selectedGuests, setSelectedGuests] = useState<string[]>([])
 
   // Dados do evento
   const eventInfo = {
@@ -155,80 +117,13 @@ export default function EventApp() {
     location: settings.event_location,
     address: settings.event_address,
     whatsapp: '(11) 99635-9550',
-    email: 'gabriellima.art@gabriellima.art'
-  }
-
-  // Funções de som
-  const playSuccessSound = () => {
-    if (!soundEnabled) return
-    try {
-      // Som de sucesso (frequência alta)
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
-      const oscillator = audioContext.createOscillator()
-      const gainNode = audioContext.createGain()
-      
-      oscillator.connect(gainNode)
-      gainNode.connect(audioContext.destination)
-      
-      oscillator.frequency.setValueAtTime(800, audioContext.currentTime)
-      oscillator.frequency.setValueAtTime(1000, audioContext.currentTime + 0.1)
-      
-      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3)
-      
-      oscillator.start(audioContext.currentTime)
-      oscillator.stop(audioContext.currentTime + 0.3)
-    } catch (error) {
-      console.log('Erro ao reproduzir som de sucesso:', error)
-    }
-  }
-
-  const playErrorSound = () => {
-    if (!soundEnabled) return
-    try {
-      // Som de erro (frequência baixa)
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
-      const oscillator = audioContext.createOscillator()
-      const gainNode = audioContext.createGain()
-      
-      oscillator.connect(gainNode)
-      gainNode.connect(audioContext.destination)
-      
-      oscillator.frequency.setValueAtTime(300, audioContext.currentTime)
-      oscillator.frequency.setValueAtTime(200, audioContext.currentTime + 0.1)
-      
-      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5)
-      
-      oscillator.start(audioContext.currentTime)
-      oscillator.stop(audioContext.currentTime + 0.5)
-    } catch (error) {
-      console.log('Erro ao reproduzir som de erro:', error)
-    }
+    email: 'contato@escalamusic.com.br'
   }
 
   // Inicializar banco de dados
   useEffect(() => {
     loadSettings()
     generateTermsText()
-    
-    // Verificar se há parâmetros de URL para acesso administrativo
-    const urlParams = new URLSearchParams(window.location.search)
-    if (urlParams.get('admin') === 'true') {
-      setCurrentScreen('admin')
-    } else if (urlParams.get('checkin') === 'true') {
-      setCurrentScreen('checkin')
-    }
-  }, [])
-
-  // Cleanup da câmera quando componente desmonta
-  useEffect(() => {
-    return () => {
-      if (qrScannerRef.current) {
-        qrScannerRef.current.destroy()
-        qrScannerRef.current = null
-      }
-    }
   }, [])
 
   // Gerar texto do termo automaticamente
@@ -262,7 +157,7 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
 
       if (data) {
         setSettings(data)
-        setTempSettings(data)
+        setTempGroupLink(data.whatsapp_group_link || '')
       }
     } catch (error) {
       console.log('Configurações não encontradas, usando padrão')
@@ -275,15 +170,15 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
         .from('app_settings')
         .upsert({
           id: '1',
-          whatsapp_group_link: tempSettings.whatsapp_group_link,
-          event_name: tempSettings.event_name,
-          event_date: tempSettings.event_date,
-          event_location: tempSettings.event_location,
-          event_address: tempSettings.event_address
+          whatsapp_group_link: tempGroupLink,
+          event_name: settings.event_name,
+          event_date: settings.event_date,
+          event_location: settings.event_location,
+          event_address: settings.event_address
         })
 
       if (!error) {
-        setSettings(tempSettings)
+        setSettings(prev => ({ ...prev, whatsapp_group_link: tempGroupLink }))
         setSettingsOpen(false)
         alert('Configurações salvas com sucesso!')
       }
@@ -315,69 +210,6 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
     }
   }
 
-  // Verificar status por email - CORRIGIDO para não buscar automaticamente
-  const checkStatusByEmail = async (email: string) => {
-    if (!email.trim()) {
-      setStatusError('Digite um email válido')
-      return
-    }
-    
-    setIsCheckingStatus(true)
-    setStatusGuest(null)
-    setStatusError('')
-    
-    try {
-      const { data, error } = await supabase
-        .from('guests')
-        .select('*')
-        .eq('email', email.toLowerCase().trim())
-
-      if (error) {
-        console.error('Erro ao verificar status:', error)
-        throw error
-      }
-
-      // Se não encontrou nenhum resultado
-      if (!data || data.length === 0) {
-        setStatusError('Nenhuma inscrição encontrada para este email. Verifique se digitou corretamente ou faça sua inscrição primeiro.')
-        setStatusGuest(null)
-        return
-      }
-
-      // Pegar o primeiro resultado (mais recente)
-      setStatusGuest(data[0])
-      setStatusError('')
-    } catch (error) {
-      console.error('Erro ao verificar status:', error)
-      setStatusError('Erro ao verificar status. Tente novamente.')
-      setStatusGuest(null)
-    } finally {
-      setIsCheckingStatus(false)
-    }
-  }
-
-  // Verificar limite de solicitações por email
-  const checkEmailRequestLimit = async (email: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('guests')
-        .select('*')
-        .eq('email', email.toLowerCase().trim())
-
-      if (error) throw error
-
-      // Se já tem 3 ou mais solicitações, bloquear
-      if (data && data.length >= 3) {
-        return false
-      }
-
-      return true
-    } catch (error) {
-      console.error('Erro ao verificar limite de email:', error)
-      return true // Em caso de erro, permitir
-    }
-  }
-
   // Gerar QR Code
   const generateQRCode = async (guestData: any) => {
     try {
@@ -404,70 +236,6 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
     }
   }
 
-  // Enviar email com QR Code - MELHORADO COM ANEXO
-  const sendEmailWithQRCode = async (guest: Guest, qrCode: string) => {
-    try {
-      setIsSendingEmail(true)
-      
-      // Converter QR Code para base64 (remover prefixo data:image/png;base64,)
-      const qrCodeBase64 = qrCode.replace(/^data:image\/png;base64,/, '')
-      
-      // Gerar PDF com QR Code usando jsPDF
-      const { jsPDF } = await import('jspdf')
-      const pdf = new jsPDF()
-      
-      // Adicionar conteúdo ao PDF
-      pdf.setFontSize(20)
-      pdf.text('QR Code de Acesso', 20, 30)
-      pdf.setFontSize(14)
-      pdf.text(`Nome: ${guest.name}`, 20, 50)
-      pdf.text(`Email: ${guest.email}`, 20, 60)
-      pdf.text(`Evento: ${eventInfo.title}`, 20, 70)
-      pdf.text(`Data: ${eventInfo.date}`, 20, 80)
-      
-      // Adicionar QR Code ao PDF
-      pdf.addImage(qrCode, 'PNG', 20, 90, 80, 80)
-      
-      // Converter PDF para base64
-      const pdfBase64 = pdf.output('datauristring').split(',')[1]
-      
-      const response = await fetch('/api/send-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          to: guest.email,
-          name: guest.name,
-          qrCodeImage: qrCodeBase64,
-          pdfBuffer: pdfBase64,
-          qrCodeData: JSON.stringify({
-            id: guest.id,
-            name: guest.name,
-            email: guest.email,
-            event: eventInfo.title,
-            date: eventInfo.date
-          })
-        })
-      })
-
-      const result = await response.json()
-      
-      if (!response.ok) {
-        throw new Error(result.error || 'Erro ao enviar email')
-      }
-
-      console.log('Email enviado com sucesso:', result)
-      return true
-    } catch (error) {
-      console.error('Erro ao enviar email:', error)
-      alert(`Erro ao enviar email para ${guest.email}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
-      return false
-    } finally {
-      setIsSendingEmail(false)
-    }
-  }
-
   // Validar telefone
   const formatPhone = (value: string) => {
     // Remove tudo que não é número
@@ -486,7 +254,7 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
     }
   }
 
-  // Submeter formulário - COM LIMITE DE EMAIL
+  // Submeter formulário
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
@@ -506,24 +274,17 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
         throw new Error('É necessário aceitar o termo de uso de imagem')
       }
 
-      // Verificar limite de solicitações por email
-      const canRequest = await checkEmailRequestLimit(formData.email.trim())
-      if (!canRequest) {
-        throw new Error('Este email já atingiu o limite máximo de 3 solicitações. Use outro email ou entre em contato conosco.')
-      }
-
       const { data, error } = await supabase
         .from('guests')
         .insert([{
           name: formData.name.trim(),
           email: formData.email.trim().toLowerCase(),
           phone: formData.phone.trim(),
-          instagram: formData.instagram.trim() || '',
+          instagram: formData.instagram.trim() || null,
           has_companion: formData.has_companion,
           accepted_terms: formData.accepted_terms,
           status: 'pending',
-          checked_in: false,
-          timestamp: new Date().toISOString()
+          checked_in: false
         }])
         .select()
         .single()
@@ -581,74 +342,14 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
 
       if (error) throw error
       
-      // Enviar email com QR Code
-      if (qrCode) {
-        const emailSent = await sendEmailWithQRCode(guest, qrCode)
-        if (emailSent) {
-          alert(`Convidado aprovado! Email enviado para ${guest.email}`)
-        } else {
-          alert(`Convidado aprovado, mas houve erro no envio do email para ${guest.email}`)
-        }
-      }
+      // Simular envio de email (em produção, usar serviço real)
+      console.log(`Email enviado para ${guest.email} com QR Code`)
+      alert(`Convidado aprovado! Email enviado para ${guest.email}`)
       
       loadGuests()
     } catch (error) {
       console.error('Erro ao aprovar convidado:', error)
       alert('Erro ao aprovar convidado')
-    }
-  }
-
-  // Aprovar múltiplos convidados
-  const approveMultipleGuests = async () => {
-    if (selectedGuests.length === 0) {
-      alert('Selecione pelo menos um convidado')
-      return
-    }
-
-    const confirmApproval = confirm(`Deseja aprovar ${selectedGuests.length} convidado(s) selecionado(s)?`)
-    if (!confirmApproval) return
-
-    setIsSendingEmail(true)
-    let successCount = 0
-    let errorCount = 0
-
-    for (const guestId of selectedGuests) {
-      try {
-        const guest = guests.find(g => g.id === guestId)
-        if (!guest) continue
-
-        const qrCode = await generateQRCode(guest)
-        
-        const { error } = await supabase
-          .from('guests')
-          .update({ 
-            status: 'approved',
-            qr_code: qrCode
-          })
-          .eq('id', guestId)
-
-        if (error) throw error
-        
-        // Enviar email com QR Code
-        if (qrCode) {
-          await sendEmailWithQRCode(guest, qrCode)
-        }
-        
-        successCount++
-      } catch (error) {
-        console.error(`Erro ao aprovar convidado ${guestId}:`, error)
-        errorCount++
-      }
-    }
-
-    setIsSendingEmail(false)
-    setSelectedGuests([])
-    loadGuests()
-
-    if (errorCount === 0) {
-      alert(`${successCount} convidado(s) aprovado(s) com sucesso!`)
-    } else {
-      alert(`${successCount} aprovado(s), ${errorCount} erro(s). Verifique os detalhes.`)
     }
   }
 
@@ -674,154 +375,17 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
       const { error } = await supabase
         .from('guests')
         .update({ 
-          checked_in: true
+          checked_in: true,
+          updated_at: new Date().toISOString()
         })
         .eq('id', guestId)
 
       if (error) throw error
       loadGuests()
-      playSuccessSound() // Som de sucesso
       alert('Check-in realizado com sucesso!')
     } catch (error) {
       console.error('Erro ao fazer check-in:', error)
-      playErrorSound() // Som de erro
       alert('Erro ao fazer check-in')
-    }
-  }
-
-  // Iniciar scanner de câmera - CORRIGIDO COM REINICIALIZAÇÃO
-  const startCameraScanner = async () => {
-    try {
-      setCameraError('')
-      setIsCameraActive(true)
-
-      // Verificar se o navegador suporta getUserMedia
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('Câmera não suportada neste navegador')
-      }
-
-      // Aguardar o elemento de vídeo estar disponível
-      await new Promise(resolve => setTimeout(resolve, 100))
-
-      if (!videoRef.current) {
-        throw new Error('Elemento de vídeo não encontrado')
-      }
-
-      // Parar scanner anterior se existir
-      if (qrScannerRef.current) {
-        qrScannerRef.current.destroy()
-        qrScannerRef.current = null
-      }
-
-      // Criar instância do QrScanner
-      qrScannerRef.current = new QrScanner(
-        videoRef.current,
-        (result) => {
-          console.log('QR Code detectado:', result.data)
-          
-          // Evitar processar o mesmo código repetidamente
-          if (result.data !== lastScannedCode) {
-            setLastScannedCode(result.data)
-            processQRCode(result.data)
-            
-            // Parar temporariamente e reiniciar após 2 segundos
-            if (qrScannerRef.current) {
-              qrScannerRef.current.stop()
-              setTimeout(() => {
-                if (qrScannerRef.current && isCameraActive) {
-                  qrScannerRef.current.start()
-                }
-              }, 2000)
-            }
-          }
-        },
-        {
-          onDecodeError: (error) => {
-            // Ignorar erros de decodificação (normal quando não há QR code na imagem)
-            console.log('Procurando QR Code...')
-          },
-          highlightScanRegion: true,
-          highlightCodeOutline: true,
-          preferredCamera: 'environment' // Câmera traseira
-        }
-      )
-
-      // Iniciar o scanner
-      await qrScannerRef.current.start()
-      console.log('Scanner de QR Code iniciado com sucesso')
-      
-    } catch (error) {
-      console.error('Erro ao iniciar câmera:', error)
-      setCameraError(error instanceof Error ? error.message : 'Erro ao acessar câmera')
-      setIsCameraActive(false)
-      playErrorSound() // Som de erro
-      
-      // Limpar scanner se houver erro
-      if (qrScannerRef.current) {
-        qrScannerRef.current.destroy()
-        qrScannerRef.current = null
-      }
-    }
-  }
-
-  // Parar scanner de câmera
-  const stopCameraScanner = () => {
-    try {
-      // Parar e destruir o scanner
-      if (qrScannerRef.current) {
-        qrScannerRef.current.stop()
-        qrScannerRef.current.destroy()
-        qrScannerRef.current = null
-      }
-
-      setIsCameraActive(false)
-      setCameraError('')
-      setLastScannedCode('')
-    } catch (error) {
-      console.error('Erro ao parar câmera:', error)
-    }
-  }
-
-  // Processar QR Code escaneado - MELHORADO COM SONS
-  const processQRCode = async (qrData: string) => {
-    try {
-      console.log('Processando QR Code:', qrData)
-      
-      // Tentar parsear como JSON
-      let guestData
-      try {
-        guestData = JSON.parse(qrData)
-      } catch {
-        // Se não for JSON, tratar como ID simples
-        guestData = { id: qrData }
-      }
-
-      if (!guestData.id) {
-        throw new Error('QR Code inválido - ID não encontrado')
-      }
-
-      // Buscar convidado no banco
-      const guest = guests.find(g => g.id === guestData.id)
-      if (!guest) {
-        throw new Error('Convidado não encontrado')
-      }
-
-      if (guest.status !== 'approved') {
-        throw new Error('Convidado não aprovado')
-      }
-
-      if (guest.checked_in) {
-        throw new Error('Check-in já realizado anteriormente')
-      }
-
-      // Realizar check-in
-      await checkInGuest(guest.id)
-      setQrScanInput('')
-      
-    } catch (error) {
-      console.error('Erro ao processar QR Code:', error)
-      playErrorSound() // Som de erro
-      alert(error instanceof Error ? error.message : 'Erro ao processar QR Code')
     }
   }
 
@@ -837,12 +401,11 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
           name: newGuestName,
           email: newGuestEmail,
           phone: '',
-          instagram: '',
+          instagram: null,
           has_companion: false,
           accepted_terms: true,
           status: 'approved',
-          checked_in: false,
-          timestamp: new Date().toISOString()
+          checked_in: false
         }])
         .select()
         .single()
@@ -868,36 +431,6 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
     }
   }
 
-  // Zerar banco de dados
-  const clearAllData = async () => {
-    const confirmClear = confirm('⚠️ ATENÇÃO: Esta ação irá APAGAR TODOS os dados de convidados permanentemente. Esta ação NÃO pode ser desfeita. Tem certeza?')
-    if (!confirmClear) return
-
-    const doubleConfirm = confirm('Confirme novamente: Deseja realmente APAGAR TODOS os dados? Digite "CONFIRMAR" na próxima tela.')
-    if (!doubleConfirm) return
-
-    const finalConfirm = prompt('Digite "CONFIRMAR" para apagar todos os dados:')
-    if (finalConfirm !== 'CONFIRMAR') {
-      alert('Operação cancelada.')
-      return
-    }
-
-    try {
-      const { error } = await supabase
-        .from('guests')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000') // Deletar todos os registros
-
-      if (error) throw error
-
-      alert('✅ Todos os dados foram apagados com sucesso!')
-      loadGuests()
-    } catch (error) {
-      console.error('Erro ao limpar dados:', error)
-      alert('Erro ao limpar dados. Tente novamente.')
-    }
-  }
-
   // Compartilhar no WhatsApp
   const shareOnWhatsApp = () => {
     const message = `🎉 Confirmei minha presença na ${eventInfo.title}!
@@ -908,18 +441,6 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
 Vai ser incrível! 🎵`
     const url = `https://wa.me/?text=${encodeURIComponent(message)}`
     window.open(url, '_blank')
-  }
-
-  // Abrir no Waze
-  const openInWaze = () => {
-    const wazeUrl = `https://waze.com/ul?q=${encodeURIComponent(eventInfo.address)}`
-    window.open(wazeUrl, '_blank')
-  }
-
-  // Abrir no Google Maps
-  const openInGoogleMaps = () => {
-    const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(eventInfo.address)}`
-    window.open(mapsUrl, '_blank')
   }
 
   // Tela de Boas-Vindas
@@ -960,33 +481,9 @@ Vai ser incrível! 🎵`
                     <div className="p-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full shadow-lg">
                       <MapPin className="w-6 h-6 text-white mt-1" />
                     </div>
-                    <div className="flex-1">
+                    <div>
                       <p className="font-bold text-lg sm:text-xl mb-2 text-gray-900">{eventInfo.location}</p>
-                      <p className="text-gray-600 text-sm sm:text-base mb-4">{eventInfo.address}</p>
-                      
-                      {/* Botões de Navegação */}
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <Button
-                          onClick={openInWaze}
-                          size="sm"
-                          className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
-                        >
-                          <Navigation className="w-4 h-4" />
-                          Abrir no Waze
-                          <ExternalLink className="w-3 h-3" />
-                        </Button>
-                        
-                        <Button
-                          onClick={openInGoogleMaps}
-                          size="sm"
-                          variant="outline"
-                          className="border-blue-500 text-blue-600 hover:bg-blue-50 flex items-center gap-2"
-                        >
-                          <MapPin className="w-4 h-4" />
-                          Google Maps
-                          <ExternalLink className="w-3 h-3" />
-                        </Button>
-                      </div>
+                      <p className="text-gray-600 text-sm sm:text-base">{eventInfo.address}</p>
                     </div>
                   </div>
 
@@ -998,7 +495,7 @@ Vai ser incrível! 🎵`
                         Vai ser lindo ter você com a gente no EP GL APAIXONADO COMO NUNCA!
                       </p>
                       <p className="text-gray-600 text-base sm:text-lg">
-                        Confirme sua presença ou verifique se já foi aprovado.
+                        Clique no botão abaixo para confirmar sua presença.
                       </p>
                     </div>
 
@@ -1009,16 +506,6 @@ Vai ser incrível! 🎵`
                     >
                       <Users className="w-6 h-6 mr-3" />
                       Confirmar Presença
-                    </Button>
-
-                    <Button 
-                      onClick={() => setCurrentScreen('status')}
-                      variant="outline"
-                      size="lg"
-                      className="w-full sm:w-auto border-2 border-blue-500 text-blue-600 hover:bg-blue-50 font-semibold px-8 py-6 text-lg rounded-lg shadow-lg hover:shadow-xl transition-all duration-300"
-                    >
-                      <Search className="w-6 h-6 mr-3" />
-                      Já me inscrevi - Ver meu QR Code
                     </Button>
 
                     {settings.whatsapp_group_link && (
@@ -1039,7 +526,7 @@ Vai ser incrível! 🎵`
           </div>
         </div>
 
-        {/* Footer com contatos */}
+        {/* Footer com contatos e admin */}
         <div className="px-4 py-8 border-t border-gray-200/50">
           <div className="max-w-2xl mx-auto text-center">
             <p className="text-gray-600 mb-6 text-lg">Contato e Suporte</p>
@@ -1054,209 +541,28 @@ Vai ser incrível! 🎵`
               </a>
             </div>
             
-            {/* Acesso administrativo via URL ou clique triplo */}
-            {showAdminAccess && (
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <Button 
-                  onClick={() => setCurrentScreen('admin')}
-                  variant="outline"
-                  size="sm"
-                  className="text-gray-600 hover:text-gray-900"
-                >
-                  <Settings className="w-4 h-4 mr-2" />
-                  Painel Admin
-                </Button>
-                
-                <Button 
-                  onClick={() => setCurrentScreen('checkin')}
-                  variant="outline"
-                  size="sm"
-                  className="text-blue-600 hover:text-blue-900 border-blue-200 hover:bg-blue-50"
-                >
-                  <Scan className="w-4 h-4 mr-2" />
-                  Check-in Portaria
-                </Button>
-              </div>
-            )}
-
-            {/* Área invisível para ativar acesso administrativo */}
-            <div 
-              className="h-8 w-full cursor-pointer opacity-0"
-              onClick={(e) => {
-                // Detectar clique triplo
-                const now = Date.now()
-                const clickTimes = (e.target as any).clickTimes || []
-                clickTimes.push(now)
-                
-                // Manter apenas os últimos 3 cliques
-                const recentClicks = clickTimes.filter((time: number) => now - time < 1000)
-                ;(e.target as any).clickTimes = recentClicks
-                
-                // Se houver 3 cliques em 1 segundo, mostrar acesso admin
-                if (recentClicks.length >= 3) {
-                  setShowAdminAccess(true)
-                  ;(e.target as any).clickTimes = []
-                }
-              }}
-            />
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button 
+                onClick={() => setCurrentScreen('admin')}
+                variant="outline"
+                size="sm"
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <Settings className="w-4 h-4 mr-2" />
+                Painel Admin
+              </Button>
+              
+              <Button 
+                onClick={() => setCurrentScreen('checkin')}
+                variant="outline"
+                size="sm"
+                className="text-blue-600 hover:text-blue-900 border-blue-200 hover:bg-blue-50"
+              >
+                <Scan className="w-4 h-4 mr-2" />
+                Check-in Portaria
+              </Button>
+            </div>
           </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Tela de Verificação de Status - MELHORADA SEM BUSCA AUTOMÁTICA
-  if (currentScreen === 'status') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-100 text-gray-900 p-4">
-        <div className="max-w-2xl mx-auto">
-          <Card className="bg-white/90 backdrop-blur-sm border border-blue-200/50 shadow-xl">
-            <CardHeader className="text-center">
-              <CardTitle className="text-2xl text-gray-900 flex items-center justify-center gap-3">
-                <Search className="w-7 h-7 text-blue-600" />
-                Ver meu QR Code
-              </CardTitle>
-              <p className="text-gray-600 mt-2">Digite o email que você usou para se inscrever e clique na lupa</p>
-            </CardHeader>
-            <CardContent className="p-6 space-y-6">
-              <div>
-                <Label htmlFor="status-email">Email da inscrição</Label>
-                <div className="flex gap-2 mt-1">
-                  <Input
-                    id="status-email"
-                    type="email"
-                    value={statusEmail}
-                    onChange={(e) => {
-                      setStatusEmail(e.target.value)
-                      // Limpar erros quando usuário digita
-                      if (statusError) {
-                        setStatusError('')
-                      }
-                      if (statusGuest) {
-                        setStatusGuest(null)
-                      }
-                    }}
-                    placeholder="seu@email.com"
-                    className="flex-1"
-                    onKeyPress={(e) => e.key === 'Enter' && statusEmail.trim() && checkStatusByEmail(statusEmail)}
-                  />
-                  <Button
-                    onClick={() => checkStatusByEmail(statusEmail)}
-                    disabled={isCheckingStatus || !statusEmail.trim()}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
-                    {isCheckingStatus ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Search className="w-4 h-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-
-              {statusError && (
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    {statusError}
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {statusGuest && (
-                <Card className={`border-2 ${
-                  statusGuest.status === 'approved' ? 'border-green-200 bg-green-50' :
-                  statusGuest.status === 'pending' ? 'border-yellow-200 bg-yellow-50' :
-                  'border-red-200 bg-red-50'
-                }`}>
-                  <CardContent className="p-6">
-                    <div className="text-center space-y-4">
-                      <div className="flex items-center justify-center gap-3">
-                        <h3 className="text-xl font-bold text-gray-900">
-                          Olá, {statusGuest.name}!
-                        </h3>
-                        <Badge variant={
-                          statusGuest.status === 'approved' ? 'default' :
-                          statusGuest.status === 'pending' ? 'secondary' : 'destructive'
-                        }>
-                          {statusGuest.status === 'approved' ? '✅ Aprovado' :
-                           statusGuest.status === 'pending' ? '⏳ Pendente' : '❌ Rejeitado'}
-                        </Badge>
-                      </div>
-
-                      {statusGuest.status === 'approved' && statusGuest.qr_code && (
-                        <div className="bg-white p-6 rounded-lg border-2 border-green-300">
-                          <h4 className="text-lg font-semibold text-green-800 mb-4">
-                            🎉 Seu QR Code de Acesso
-                          </h4>
-                          <img 
-                            src={statusGuest.qr_code} 
-                            alt="QR Code de Acesso" 
-                            className="mx-auto mb-4 border rounded-lg max-w-64"
-                          />
-                          <p className="text-green-700 text-sm">
-                            Apresente este QR Code na entrada do evento
-                          </p>
-                          {statusGuest.checked_in && (
-                            <Badge className="mt-3 bg-purple-100 text-purple-700 border-purple-200">
-                              <UserCheck className="w-3 h-3 mr-1" />
-                              Check-in Realizado
-                            </Badge>
-                          )}
-                        </div>
-                      )}
-
-                      {statusGuest.status === 'pending' && (
-                        <div className="bg-yellow-100 p-4 rounded-lg border border-yellow-300">
-                          <p className="text-yellow-800">
-                            <strong>⏳ Aguardando aprovação</strong><br />
-                            Você receberá um email com o QR Code após a aprovação.
-                          </p>
-                        </div>
-                      )}
-
-                      {statusGuest.status === 'rejected' && (
-                        <div className="bg-red-100 p-4 rounded-lg border border-red-300">
-                          <p className="text-red-800">
-                            <strong>❌ Presença não aprovada</strong><br />
-                            Entre em contato conosco para mais informações.
-                          </p>
-                        </div>
-                      )}
-
-                      <div className="text-sm text-gray-600 space-y-1">
-                        <p><strong>Email:</strong> {statusGuest.email}</p>
-                        <p><strong>Telefone:</strong> {statusGuest.phone}</p>
-                        <p><strong>Confirmado em:</strong> {new Date(statusGuest.created_at).toLocaleDateString('pt-BR')}</p>
-                        {statusGuest.has_companion && (
-                          <p><strong>Acompanhante:</strong> Sim</p>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              <div className="flex gap-3">
-                <Button
-                  onClick={() => setCurrentScreen('welcome')}
-                  variant="outline"
-                  className="flex-1"
-                >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Voltar
-                </Button>
-                
-                <Button
-                  onClick={() => setCurrentScreen('form')}
-                  className="flex-1 bg-purple-600 hover:bg-purple-700"
-                >
-                  <UserPlus className="w-4 h-4 mr-2" />
-                  Fazer Inscrição
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </div>
     )
@@ -1561,20 +867,11 @@ Vai ser incrível! 🎵`
                 </CardTitle>
                 <div className="flex gap-2">
                   <Button
-                    onClick={() => setSoundEnabled(!soundEnabled)}
-                    variant="outline"
-                    size="sm"
-                    className={soundEnabled ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}
-                  >
-                    {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-                  </Button>
-                  <Button
                     onClick={loadGuests}
                     variant="outline"
                     size="sm"
                   >
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Atualizar
+                    Atualizar Lista
                   </Button>
                   <Button
                     onClick={() => {
@@ -1599,95 +896,6 @@ Vai ser incrível! 🎵`
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {/* Scanner de QR Code com Câmera - MELHORADO */}
-                  <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
-                    <CardContent className="p-6">
-                      <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center gap-2">
-                        <Zap className="w-5 h-5" />
-                        Scanner de QR Code
-                      </h3>
-                      
-                      <div className="space-y-4">
-                        {/* Controles da Câmera */}
-                        <div className="flex gap-2">
-                          {!isCameraActive ? (
-                            <Button
-                              onClick={startCameraScanner}
-                              className="bg-green-600 hover:bg-green-700 text-white"
-                            >
-                              <Camera className="w-4 h-4 mr-2" />
-                              Iniciar Câmera
-                            </Button>
-                          ) : (
-                            <Button
-                              onClick={stopCameraScanner}
-                              variant="destructive"
-                            >
-                              <CameraOff className="w-4 h-4 mr-2" />
-                              Parar Câmera
-                            </Button>
-                          )}
-                        </div>
-
-                        {/* Área da Câmera */}
-                        {isCameraActive && (
-                          <div className="relative bg-black rounded-lg overflow-hidden">
-                            <video
-                              ref={videoRef}
-                              className="w-full max-w-md mx-auto rounded-lg"
-                              style={{ aspectRatio: '4/3' }}
-                              playsInline
-                              muted
-                              autoPlay
-                            />
-                            <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded text-xs">
-                              🔍 Procurando QR Code...
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Erro da Câmera */}
-                        {cameraError && (
-                          <Alert className="border-red-200 bg-red-50">
-                            <AlertCircle className="h-4 w-4 text-red-600" />
-                            <AlertDescription className="text-red-800">
-                              <strong>Erro na câmera:</strong> {cameraError}
-                            </AlertDescription>
-                          </Alert>
-                        )}
-
-                        {/* Scanner Manual (Fallback) */}
-                        <div className="border-t pt-4">
-                          <Label htmlFor="qr-input">Ou cole/digite o código manualmente:</Label>
-                          <div className="flex gap-2 mt-1">
-                            <Input
-                              id="qr-input"
-                              value={qrScanInput}
-                              onChange={(e) => setQrScanInput(e.target.value)}
-                              placeholder="Cole aqui o conteúdo do QR Code ou ID do convidado"
-                              className="flex-1"
-                            />
-                            <Button
-                              onClick={() => processQRCode(qrScanInput)}
-                              disabled={!qrScanInput.trim()}
-                              className="bg-blue-600 hover:bg-blue-700"
-                            >
-                              <Scan className="w-4 h-4 mr-2" />
-                              Processar
-                            </Button>
-                          </div>
-                        </div>
-
-                        <Alert>
-                          <AlertCircle className="h-4 w-4" />
-                          <AlertDescription>
-                            <strong>Como usar:</strong> Clique em "Iniciar Câmera" e aponte para o QR Code do convidado. O sistema detectará automaticamente e emitirá sons de confirmação.
-                          </AlertDescription>
-                        </Alert>
-                      </div>
-                    </CardContent>
-                  </Card>
-
                   {/* Estatísticas Simplificadas */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <Card className="bg-green-50 border-green-200">
@@ -1753,9 +961,8 @@ Vai ser incrível! 🎵`
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-600">
                                   <p><strong>Email:</strong> {guest.email}</p>
                                   <p><strong>Telefone:</strong> {guest.phone}</p>
-                                  <p><strong>ID:</strong> {guest.id}</p>
                                   {guest.checked_in && (
-                                    <p><strong>Check-in:</strong> {new Date(guest.created_at).toLocaleString('pt-BR')}</p>
+                                    <p><strong>Check-in:</strong> {new Date(guest.updated_at || guest.created_at).toLocaleString('pt-BR')}</p>
                                   )}
                                 </div>
                               </div>
@@ -1790,11 +997,8 @@ Vai ser incrível! 🎵`
                                           alt="QR Code" 
                                           className="mx-auto mb-4 border rounded-lg"
                                         />
-                                        <p className="text-sm text-gray-600 mb-2">
+                                        <p className="text-sm text-gray-600">
                                           QR Code para acesso ao evento
-                                        </p>
-                                        <p className="text-xs text-gray-500 font-mono bg-gray-100 p-2 rounded">
-                                          ID: {guest.id}
                                         </p>
                                       </div>
                                     </DialogContent>
@@ -1882,109 +1086,44 @@ Vai ser incrível! 🎵`
                   <Settings className="w-7 h-7" />
                   Painel Administrativo
                 </CardTitle>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2">
                   <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
                     <DialogTrigger asChild>
                       <Button variant="outline" size="sm">
-                        <Settings className="w-4 h-4 mr-2" />
+                        <Link className="w-4 h-4 mr-2" />
                         Configurações
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <DialogContent>
                       <DialogHeader>
-                        <DialogTitle className="text-xl">Configurações do Sistema</DialogTitle>
+                        <DialogTitle>Configurações do Evento</DialogTitle>
                       </DialogHeader>
-                      <div className="space-y-6">
-                        {/* Configurações do Evento */}
-                        <Card>
-                          <CardHeader>
-                            <CardTitle className="text-lg flex items-center gap-2">
-                              <Calendar className="w-5 h-5" />
-                              Informações do Evento
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-4">
-                            <div>
-                              <Label htmlFor="event-name">Nome do Evento</Label>
-                              <Input
-                                id="event-name"
-                                value={tempSettings.event_name}
-                                onChange={(e) => setTempSettings(prev => ({ ...prev, event_name: e.target.value }))}
-                                className="mt-1"
-                                placeholder="Nome completo do evento"
-                              />
-                            </div>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <Label htmlFor="event-date">Data e Horário</Label>
-                                <Input
-                                  id="event-date"
-                                  value={tempSettings.event_date}
-                                  onChange={(e) => setTempSettings(prev => ({ ...prev, event_date: e.target.value }))}
-                                  className="mt-1"
-                                  placeholder="Ex: 09/10 às 15h"
-                                />
-                              </div>
-                              
-                              <div>
-                                <Label htmlFor="event-location">Local do Evento</Label>
-                                <Input
-                                  id="event-location"
-                                  value={tempSettings.event_location}
-                                  onChange={(e) => setTempSettings(prev => ({ ...prev, event_location: e.target.value }))}
-                                  className="mt-1"
-                                  placeholder="Nome do local"
-                                />
-                              </div>
-                            </div>
-                            
-                            <div>
-                              <Label htmlFor="event-address">Endereço Completo</Label>
-                              <Textarea
-                                id="event-address"
-                                value={tempSettings.event_address}
-                                onChange={(e) => setTempSettings(prev => ({ ...prev, event_address: e.target.value }))}
-                                className="mt-1"
-                                rows={3}
-                                placeholder="Endereço completo com CEP"
-                              />
-                            </div>
-                            
-                            <div>
-                              <Label htmlFor="group-link">Link do Grupo WhatsApp</Label>
-                              <Input
-                                id="group-link"
-                                value={tempSettings.whatsapp_group_link || ''}
-                                onChange={(e) => setTempSettings(prev => ({ ...prev, whatsapp_group_link: e.target.value }))}
-                                placeholder="https://chat.whatsapp.com/..."
-                                className="mt-1"
-                              />
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </div>
-                      
-                      <div className="flex gap-2 pt-4 border-t">
-                        <Button onClick={saveSettings} className="flex-1 bg-green-600 hover:bg-green-700">
-                          <Send className="w-4 h-4 mr-2" />
-                          Salvar Configurações
-                        </Button>
-                        <Button variant="outline" onClick={() => setSettingsOpen(false)} className="flex-1">
-                          Cancelar
-                        </Button>
+                      <div className="space-y-4">
+                        <div>
+                          <Label htmlFor="group-link">Link do Grupo WhatsApp</Label>
+                          <Input
+                            id="group-link"
+                            value={tempGroupLink}
+                            onChange={(e) => setTempGroupLink(e.target.value)}
+                            placeholder="https://chat.whatsapp.com/..."
+                            className="mt-1"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Este link aparecerá nos botões "Grupo Oficial"
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button onClick={saveSettings} className="flex-1">
+                            <Send className="w-4 h-4 mr-2" />
+                            Salvar
+                          </Button>
+                          <Button variant="outline" onClick={() => setSettingsOpen(false)} className="flex-1">
+                            Cancelar
+                          </Button>
+                        </div>
                       </div>
                     </DialogContent>
                   </Dialog>
-
-                  <Button
-                    onClick={clearAllData}
-                    variant="destructive"
-                    size="sm"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Zerar Dados
-                  </Button>
 
                   <Button
                     onClick={() => {
@@ -2052,48 +1191,6 @@ Vai ser incrível! 🎵`
                     </Card>
                   </div>
 
-                  {/* Status do Email */}
-                  {isSendingEmail && (
-                    <Alert>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <AlertDescription>
-                        Enviando emails com QR Code...
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  {/* Seleção Múltipla e Ações em Lote */}
-                  {selectedGuests.length > 0 && (
-                    <Card className="bg-blue-50 border-blue-200">
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <p className="text-blue-800 font-semibold">
-                            {selectedGuests.length} convidado(s) selecionado(s)
-                          </p>
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={approveMultipleGuests}
-                              size="sm"
-                              className="bg-green-600 hover:bg-green-700"
-                              disabled={isSendingEmail}
-                            >
-                              <Check className="w-4 h-4 mr-2" />
-                              Aprovar Selecionados
-                            </Button>
-                            <Button
-                              onClick={() => setSelectedGuests([])}
-                              size="sm"
-                              variant="outline"
-                            >
-                              <X className="w-4 h-4 mr-2" />
-                              Limpar Seleção
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
                   {/* Adicionar Convidado */}
                   <Card className="bg-gray-50 border-gray-200">
                     <CardContent className="p-4">
@@ -2144,26 +1241,13 @@ Vai ser incrível! 🎵`
                       <h3 className="text-lg font-semibold text-gray-900">
                         Convidados ({guests.length})
                       </h3>
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={() => {
-                            const pendingGuests = guests.filter(g => g.status === 'pending').map(g => g.id)
-                            setSelectedGuests(pendingGuests)
-                          }}
-                          variant="outline"
-                          size="sm"
-                        >
-                          Selecionar Pendentes
-                        </Button>
-                        <Button
-                          onClick={loadGuests}
-                          variant="outline"
-                          size="sm"
-                        >
-                          <RefreshCw className="w-4 h-4 mr-2" />
-                          Atualizar
-                        </Button>
-                      </div>
+                      <Button
+                        onClick={loadGuests}
+                        variant="outline"
+                        size="sm"
+                      >
+                        Atualizar
+                      </Button>
                     </div>
 
                     <div className="space-y-3">
@@ -2171,51 +1255,35 @@ Vai ser incrível! 🎵`
                         <Card key={guest.id} className="border border-gray-200">
                           <CardContent className="p-4">
                             <div className="flex items-start justify-between">
-                              <div className="flex items-start gap-3">
-                                {/* Checkbox para seleção múltipla */}
-                                {guest.status === 'pending' && (
-                                  <Checkbox
-                                    checked={selectedGuests.includes(guest.id)}
-                                    onCheckedChange={(checked) => {
-                                      if (checked) {
-                                        setSelectedGuests(prev => [...prev, guest.id])
-                                      } else {
-                                        setSelectedGuests(prev => prev.filter(id => id !== guest.id))
-                                      }
-                                    }}
-                                    className="mt-1"
-                                  />
-                                )}
-                                
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-3 mb-2 flex-wrap">
-                                    <h4 className="font-semibold text-gray-900">
-                                      {guest.name}
-                                    </h4>
-                                    <Badge variant={
-                                      guest.status === 'approved' ? 'default' :
-                                      guest.status === 'pending' ? 'secondary' : 'destructive'
-                                    }>
-                                      {guest.status === 'approved' ? 'Aprovado' :
-                                       guest.status === 'pending' ? 'Pendente' : 'Rejeitado'}
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-2 flex-wrap">
+                                  <h4 className="font-semibold text-gray-900">
+                                    {guest.name}
+                                  </h4>
+                                  <Badge variant={
+                                    guest.status === 'approved' ? 'default' :
+                                    guest.status === 'pending' ? 'secondary' : 'destructive'
+                                  }>
+                                    {guest.status === 'approved' ? 'Aprovado' :
+                                     guest.status === 'pending' ? 'Pendente' : 'Rejeitado'}
+                                  </Badge>
+                                  {guest.checked_in && (
+                                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                      <UserCheck className="w-3 h-3 mr-1" />
+                                      Check-in
                                     </Badge>
-                                    {guest.checked_in && (
-                                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                                        <UserCheck className="w-3 h-3 mr-1" />
-                                        Check-in
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-600">
-                                    <p><strong>Email:</strong> {guest.email}</p>
-                                    <p><strong>Telefone:</strong> {guest.phone}</p>
-                                    {guest.instagram && (
-                                      <p><strong>Instagram:</strong> {guest.instagram}</p>
-                                    )}
-                                    <p><strong>Acompanhante:</strong> {guest.has_companion ? 'Sim' : 'Não'}</p>
-                                    <p><strong>Data:</strong> {new Date(guest.created_at).toLocaleDateString('pt-BR')}</p>
-                                  </div>
+                                  )}
+                                </div>
+                                
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-600">
+                                  <p><strong>Email:</strong> {guest.email}</p>
+                                  <p><strong>Telefone:</strong> {guest.phone}</p>
+                                  {guest.instagram && (
+                                    <p><strong>Instagram:</strong> {guest.instagram}</p>
+                                  )}
+                                  <p><strong>Acompanhante:</strong> {guest.has_companion ? 'Sim' : 'Não'}</p>
+                                  <p><strong>Termo de imagem:</strong> {guest.accepted_terms ? 'Aceito' : 'Não aceito'}</p>
+                                  <p><strong>Data:</strong> {new Date(guest.created_at).toLocaleDateString('pt-BR')}</p>
                                 </div>
                               </div>
 
@@ -2226,7 +1294,6 @@ Vai ser incrível! 🎵`
                                       onClick={() => approveGuest(guest.id)}
                                       size="sm"
                                       className="bg-green-600 hover:bg-green-700 text-white"
-                                      disabled={isSendingEmail}
                                     >
                                       <Check className="w-4 h-4 mr-1" />
                                       Aprovar
