@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Confirmação de Presença - EscalaMusic</title>
+        <title>🎵 Confirmação de Presença – Gravação do EP "Apaixonado Como Nunca"</title>
         <style>
           body {
             font-family: 'Arial', sans-serif;
@@ -91,9 +91,7 @@ export async function POST(request: NextRequest) {
           }
           .header {
             text-align: center;
-            margin-bottom: 40px;
-            padding-bottom: 30px;
-            border-bottom: 3px solid #e9ecef;
+            margin-bottom: 30px;
           }
           .logo {
             max-width: 200px;
@@ -102,47 +100,48 @@ export async function POST(request: NextRequest) {
           }
           .title {
             color: #2c3e50;
-            font-size: 28px;
+            font-size: 24px;
             font-weight: bold;
-            margin: 0;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
-          }
-          .subtitle {
-            color: #7f8c8d;
-            font-size: 18px;
-            margin: 10px 0 0 0;
-          }
-          .content {
-            margin: 30px 0;
+            margin: 0 0 10px 0;
           }
           .greeting {
-            font-size: 20px;
+            font-size: 18px;
             color: #2c3e50;
-            font-weight: bold;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
           }
-          .message {
+          .confirmation {
             font-size: 16px;
-            line-height: 1.8;
-            margin-bottom: 25px;
+            margin-bottom: 20px;
             color: #34495e;
           }
-          .event-info {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 25px;
-            border-radius: 12px;
-            margin: 30px 0;
+          .highlight {
+            background: linear-gradient(120deg, #a8edea 0%, #fed6e3 100%);
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
             text-align: center;
-          }
-          .event-info h3 {
-            margin: 0 0 15px 0;
-            font-size: 22px;
             font-weight: bold;
+            color: #2c3e50;
           }
           .event-details {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 5px solid #667eea;
+          }
+          .event-details h3 {
+            color: #2c3e50;
+            margin: 0 0 15px 0;
+            font-size: 20px;
+          }
+          .detail-item {
+            margin-bottom: 10px;
             font-size: 16px;
-            line-height: 1.6;
+            color: #34495e;
+          }
+          .detail-item strong {
+            color: #2c3e50;
           }
           .qr-section {
             background: #f8f9fa;
@@ -152,6 +151,11 @@ export async function POST(request: NextRequest) {
             margin: 30px 0;
             border: 2px dashed #dee2e6;
           }
+          .qr-section h3 {
+            color: #2c3e50;
+            margin: 0 0 15px 0;
+            font-size: 20px;
+          }
           .qr-code {
             max-width: 250px;
             height: auto;
@@ -159,6 +163,17 @@ export async function POST(request: NextRequest) {
             border: 3px solid white;
             border-radius: 10px;
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+          }
+          .qr-note {
+            color: #7f8c8d;
+            font-size: 14px;
+            margin-top: 15px;
+            font-weight: bold;
+          }
+          .qr-fallback {
+            color: #7f8c8d;
+            font-size: 14px;
+            margin-top: 10px;
           }
           .instructions {
             background: #e8f5e8;
@@ -185,30 +200,20 @@ export async function POST(request: NextRequest) {
             margin-top: 40px;
             padding-top: 30px;
             border-top: 2px solid #e9ecef;
-            color: #7f8c8d;
-          }
-          .contact-info {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            margin: 20px 0;
-          }
-          .contact-info h4 {
             color: #2c3e50;
-            margin: 0 0 15px 0;
           }
-          .highlight {
-            background: linear-gradient(120deg, #a8edea 0%, #fed6e3 100%);
-            padding: 20px;
-            border-radius: 10px;
-            margin: 20px 0;
-            text-align: center;
+          .brand {
             font-weight: bold;
-            color: #2c3e50;
+            font-size: 18px;
+            margin-bottom: 5px;
+          }
+          .tagline {
+            font-size: 14px;
+            color: #7f8c8d;
+            font-style: italic;
           }
           .emoji {
-            font-size: 24px;
-            margin: 0 5px;
+            font-size: 20px;
           }
         </style>
       </head>
@@ -216,77 +221,64 @@ export async function POST(request: NextRequest) {
         <div class="container">
           <div class="header">
             <img src="https://i.postimg.cc/XvsKmNKW/ESCALA-MUSIC-NOVO-LOGO.png" alt="EscalaMusic Logo" class="logo">
-            <h1 class="title">🎵 Confirmação de Presença</h1>
-            <p class="subtitle">Gravação do EP "Apaixonado Como Nunca"</p>
           </div>
 
-          <div class="content">
-            <div class="greeting">
-              Olá, ${name}! <span class="emoji">👋</span>
-            </div>
+          <div class="greeting">
+            Olá, ${name}!
+          </div>
 
-            <div class="message">
-              <strong>Parabéns!</strong> Sua presença foi <span style="color: #28a745; font-weight: bold;">CONFIRMADA</span> para a gravação do EP "Apaixonado Como Nunca"! <span class="emoji">🎉</span>
-            </div>
+          <div class="confirmation">
+            Parabéns! Sua presença foi <strong>CONFIRMADA</strong> para a gravação do EP "Apaixonado Como Nunca" <span class="emoji">🎉</span>
+          </div>
 
-            <div class="highlight">
-              <span class="emoji">✨</span> Vai ser lindo ter você com a gente neste momento especial! <span class="emoji">✨</span>
-            </div>
+          <div class="highlight">
+            <span class="emoji">✨</span> Vai ser incrível ter você com a gente nesse momento especial! <span class="emoji">✨</span>
+          </div>
 
-            <div class="event-info">
-              <h3><span class="emoji">🎬</span> Detalhes do Evento</h3>
-              <div class="event-details">
-                <strong>📅 Data:</strong> 09/10 às 15h<br>
-                <strong>📍 Local:</strong> Prainha Natal – ao lado do Hotel Imirá<br>
-                <strong>🗺️ Endereço:</strong> Av. Senador Dinarte Mariz, Via Costeira, 4077 - B, Natal - RN, 59090-002
-              </div>
+          <div class="event-details">
+            <h3><span class="emoji">🎬</span> Detalhes do Evento</h3>
+            <div class="detail-item">
+              <strong><span class="emoji">📅</span> Data:</strong> 09/10 às 15h
             </div>
+            <div class="detail-item">
+              <strong><span class="emoji">📍</span> Local:</strong> Prainha Natal – ao lado do Hotel Imirá
+            </div>
+            <div class="detail-item">
+              <strong><span class="emoji">🗺️</span> Endereço:</strong> Av. Senador Dinarte Mariz, Via Costeira, 4077 - B, Natal - RN, 59090-002
+            </div>
+          </div>
 
-            <div class="qr-section">
-              <h3 style="color: #2c3e50; margin-bottom: 15px;">
-                <span class="emoji">📱</span> Seu QR Code de Acesso
-              </h3>
-              <p style="color: #7f8c8d; margin-bottom: 20px;">
-                Apresente este código na entrada do evento
-              </p>
-              <img src="data:image/png;base64,${qrCodeImage}" alt="QR Code de Acesso" class="qr-code">
-              <p style="color: #7f8c8d; font-size: 14px; margin-top: 15px;">
-                <strong>Código único e intransferível</strong>
-              </p>
+          <div class="qr-section">
+            <h3><span class="emoji">📱</span> Seu QR Code de Acesso</h3>
+            <p>Apresente o código abaixo na entrada do evento.</p>
+            <p style="font-size: 14px; color: #7f8c8d;">(Código único e intransferível)</p>
+            
+            <img src="data:image/png;base64,${qrCodeImage}" alt="QR Code de Acesso" class="qr-code">
+            
+            <div class="qr-fallback">
+              <strong>⚠️ Caso o QR Code não seja exibido corretamente, clique aqui para visualizar seu código</strong>
             </div>
+          </div>
 
-            <div class="instructions">
-              <h4><span class="emoji">📋</span> Instruções Importantes:</h4>
-              <ul>
-                <li><strong>Chegue com antecedência</strong> para facilitar o check-in</li>
-                <li><strong>Apresente este QR Code</strong> na entrada do evento</li>
-                <li><strong>Guarde uma captura de tela</strong> como backup</li>
-                <li><strong>Traga documento com foto</strong> para confirmação</li>
-                <li><strong>Vista-se adequadamente</strong> para as gravações</li>
-                <li><strong>Mantenha o celular carregado</strong> para apresentar o QR Code</li>
-              </ul>
-            </div>
+          <div class="instructions">
+            <h4><span class="emoji">📋</span> Instruções Importantes</h4>
+            <ul>
+              <li>Chegue com antecedência para facilitar o check-in.</li>
+              <li>Apresente este QR Code na entrada.</li>
+              <li>Salve uma captura de tela ou acesse o link acima para abrir o código.</li>
+              <li>Traga um documento com foto para confirmação.</li>
+              <li>Vista-se adequadamente para as gravações.</li>
+              <li>Mantenha o celular carregado para apresentar o código.</li>
+            </ul>
+          </div>
 
-            <div class="contact-info">
-              <h4><span class="emoji">📞</span> Contato e Suporte:</h4>
-              <p><strong>WhatsApp:</strong> (11) 99635-9550</p>
-              <p><strong>E-mail:</strong> gabriellima.art@gabriellima.art</p>
-              <p style="margin-top: 15px; color: #7f8c8d;">
-                <em>Entre em contato conosco se tiver qualquer dúvida!</em>
-              </p>
-            </div>
-
-            <div class="highlight">
-              <span class="emoji">🎵</span> Prepare-se para viver momentos inesquecíveis! <span class="emoji">🎵</span>
-            </div>
+          <div class="highlight">
+            <span class="emoji">🎵</span> Prepare-se para viver momentos inesquecíveis! <span class="emoji">🎵</span>
           </div>
 
           <div class="footer">
-            <p><strong>EscalaMusic</strong></p>
-            <p>Criando momentos musicais únicos</p>
-            <p style="font-size: 12px; margin-top: 20px;">
-              Este e-mail foi enviado automaticamente. Por favor, não responda.
-            </p>
+            <div class="brand">EscalaMusic</div>
+            <div class="tagline">ESCALANDO SUCESSOS</div>
           </div>
         </div>
       </body>
@@ -311,7 +303,7 @@ export async function POST(request: NextRequest) {
     const data = await resend.emails.send({
       from: 'EscalaMusic <gabriellima.art@gabriellima.art>',
       to: [to],
-      subject: `🎵 Confirmação de Presença - EP "Apaixonado Como Nunca" - ${name}`,
+      subject: `🎵 Confirmação de Presença – Gravação do EP "Apaixonado Como Nunca"`,
       html: emailHtml,
       attachments: attachments.length > 0 ? attachments : undefined,
     })
