@@ -50,13 +50,14 @@ interface Guest {
   name: string
   email: string
   phone: string
-  instagram: string | null
+  instagram: string
   has_companion: boolean
   accepted_terms: boolean
   status: 'pending' | 'approved' | 'rejected'
   qr_code: string | null
   checked_in: boolean
-  checked_in_at: string | null
+  updated_at: string | null
+  timestamp: string
 }
 
 interface AppSettings {
@@ -376,8 +377,7 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
       const { error } = await supabase
         .from('guests')
         .update({ 
-          checked_in: true,
-          updated_at: new Date().toISOString()
+          checked_in: true
         })
         .eq('id', guestId)
 
@@ -964,7 +964,7 @@ Vai ser incrível! 🎵`
                                   <p><strong>Email:</strong> {guest.email}</p>
                                   <p><strong>Telefone:</strong> {guest.phone}</p>
                                   {guest.checked_in && (
-                                    <p><strong>Check-in:</strong> {new Date(guest.updated_at || guest.created_at).toLocaleString('pt-BR')}</p>
+                                    <p><strong>Check-in:</strong> {new Date(guest.created_at).toLocaleString('pt-BR')}</p>
                                   )}
                                 </div>
                               </div>
