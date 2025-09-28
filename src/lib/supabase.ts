@@ -15,13 +15,14 @@ export type Database = {
           name: string
           email: string
           phone: string
-          instagram: string | null
+          instagram: string
           has_companion: boolean
-          image_consent: boolean
+          accepted_terms: boolean
           status: 'pending' | 'approved' | 'rejected'
           qr_code: string | null
           checked_in: boolean
-          checked_in_at: string | null
+          updated_at: string | null
+          timestamp: string
         }
         Insert: {
           id?: string
@@ -29,13 +30,13 @@ export type Database = {
           name: string
           email: string
           phone: string
-          instagram?: string | null
+          instagram?: string
           has_companion?: boolean
-          image_consent?: boolean
+          accepted_terms?: boolean
           status?: 'pending' | 'approved' | 'rejected'
           qr_code?: string | null
           checked_in?: boolean
-          checked_in_at?: string | null
+          timestamp: string
         }
         Update: {
           id?: string
@@ -43,13 +44,13 @@ export type Database = {
           name?: string
           email?: string
           phone?: string
-          instagram?: string | null
+          instagram?: string
           has_companion?: boolean
-          image_consent?: boolean
+          accepted_terms?: boolean
           status?: 'pending' | 'approved' | 'rejected'
           qr_code?: string | null
           checked_in?: boolean
-          checked_in_at?: string | null
+          updated_at?: string | null
         }
       }
       app_settings: {
