@@ -48,7 +48,9 @@ import {
   Navigation,
   ExternalLink,
   Volume2,
-  VolumeX
+  VolumeX,
+  Trash2,
+  RefreshCw
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -68,6 +70,7 @@ interface Guest {
   checked_in: boolean
   updated_at: string | null
   timestamp: string
+  request_count?: number
 }
 
 interface AppSettings {
@@ -134,12 +137,16 @@ export default function EventApp() {
   const [statusEmail, setStatusEmail] = useState('')
   const [statusGuest, setStatusGuest] = useState<Guest | null>(null)
   const [isCheckingStatus, setIsCheckingStatus] = useState(false)
+  const [statusError, setStatusError] = useState('')
 
   // Estados para acesso administrativo via URL
   const [showAdminAccess, setShowAdminAccess] = useState(false)
 
   // Estados para sons
   const [soundEnabled, setSoundEnabled] = useState(true)
+
+  // Estados para seleção múltipla no admin
+  const [selectedGuests, setSelectedGuests] = useState<string[]>([])
 
   // Dados do evento
   const eventInfo = {
@@ -310,10 +317,14 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
 
   // Verificar status por email - CORRIGIDO para não buscar automaticamente
   const checkStatusByEmail = async (email: string) => {
-    if (!email.trim()) return
+    if (!email.trim()) {
+      setStatusError('Digite um email válido')
+      return
+    }
     
     setIsCheckingStatus(true)
-    setStatusGuest(null) // Limpar resultado anterior
+    setStatusGuest(null)
+    setStatusError('')
     
     try {
       const { data, error } = await supabase
@@ -328,18 +339,42 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
 
       // Se não encontrou nenhum resultado
       if (!data || data.length === 0) {
+        setStatusError('Nenhuma inscrição encontrada para este email. Verifique se digitou corretamente ou faça sua inscrição primeiro.')
         setStatusGuest(null)
         return
       }
 
       // Pegar o primeiro resultado (mais recente)
       setStatusGuest(data[0])
+      setStatusError('')
     } catch (error) {
       console.error('Erro ao verificar status:', error)
-      alert('Erro ao verificar status. Tente novamente.')
+      setStatusError('Erro ao verificar status. Tente novamente.')
       setStatusGuest(null)
     } finally {
       setIsCheckingStatus(false)
+    }
+  }
+
+  // Verificar limite de solicitações por email
+  const checkEmailRequestLimit = async (email: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('guests')
+        .select('*')
+        .eq('email', email.toLowerCase().trim())
+
+      if (error) throw error
+
+      // Se já tem 3 ou mais solicitações, bloquear
+      if (data && data.length >= 3) {
+        return false
+      }
+
+      return true
+    } catch (error) {
+      console.error('Erro ao verificar limite de email:', error)
+      return true // Em caso de erro, permitir
     }
   }
 
@@ -369,13 +404,32 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
     }
   }
 
-  // Enviar email com QR Code - CORRIGIDO
+  // Enviar email com QR Code - MELHORADO COM ANEXO
   const sendEmailWithQRCode = async (guest: Guest, qrCode: string) => {
     try {
       setIsSendingEmail(true)
       
       // Converter QR Code para base64 (remover prefixo data:image/png;base64,)
       const qrCodeBase64 = qrCode.replace(/^data:image\/png;base64,/, '')
+      
+      // Gerar PDF com QR Code usando jsPDF
+      const { jsPDF } = await import('jspdf')
+      const pdf = new jsPDF()
+      
+      // Adicionar conteúdo ao PDF
+      pdf.setFontSize(20)
+      pdf.text('QR Code de Acesso', 20, 30)
+      pdf.setFontSize(14)
+      pdf.text(`Nome: ${guest.name}`, 20, 50)
+      pdf.text(`Email: ${guest.email}`, 20, 60)
+      pdf.text(`Evento: ${eventInfo.title}`, 20, 70)
+      pdf.text(`Data: ${eventInfo.date}`, 20, 80)
+      
+      // Adicionar QR Code ao PDF
+      pdf.addImage(qrCode, 'PNG', 20, 90, 80, 80)
+      
+      // Converter PDF para base64
+      const pdfBase64 = pdf.output('datauristring').split(',')[1]
       
       const response = await fetch('/api/send-email', {
         method: 'POST',
@@ -386,6 +440,7 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
           to: guest.email,
           name: guest.name,
           qrCodeImage: qrCodeBase64,
+          pdfBuffer: pdfBase64,
           qrCodeData: JSON.stringify({
             id: guest.id,
             name: guest.name,
@@ -431,7 +486,7 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
     }
   }
 
-  // Submeter formulário
+  // Submeter formulário - COM LIMITE DE EMAIL
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
@@ -449,6 +504,12 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
       }
       if (!formData.accepted_terms) {
         throw new Error('É necessário aceitar o termo de uso de imagem')
+      }
+
+      // Verificar limite de solicitações por email
+      const canRequest = await checkEmailRequestLimit(formData.email.trim())
+      if (!canRequest) {
+        throw new Error('Este email já atingiu o limite máximo de 3 solicitações. Use outro email ou entre em contato conosco.')
       }
 
       const { data, error } = await supabase
@@ -537,6 +598,60 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
     }
   }
 
+  // Aprovar múltiplos convidados
+  const approveMultipleGuests = async () => {
+    if (selectedGuests.length === 0) {
+      alert('Selecione pelo menos um convidado')
+      return
+    }
+
+    const confirmApproval = confirm(`Deseja aprovar ${selectedGuests.length} convidado(s) selecionado(s)?`)
+    if (!confirmApproval) return
+
+    setIsSendingEmail(true)
+    let successCount = 0
+    let errorCount = 0
+
+    for (const guestId of selectedGuests) {
+      try {
+        const guest = guests.find(g => g.id === guestId)
+        if (!guest) continue
+
+        const qrCode = await generateQRCode(guest)
+        
+        const { error } = await supabase
+          .from('guests')
+          .update({ 
+            status: 'approved',
+            qr_code: qrCode
+          })
+          .eq('id', guestId)
+
+        if (error) throw error
+        
+        // Enviar email com QR Code
+        if (qrCode) {
+          await sendEmailWithQRCode(guest, qrCode)
+        }
+        
+        successCount++
+      } catch (error) {
+        console.error(`Erro ao aprovar convidado ${guestId}:`, error)
+        errorCount++
+      }
+    }
+
+    setIsSendingEmail(false)
+    setSelectedGuests([])
+    loadGuests()
+
+    if (errorCount === 0) {
+      alert(`${successCount} convidado(s) aprovado(s) com sucesso!`)
+    } else {
+      alert(`${successCount} aprovado(s), ${errorCount} erro(s). Verifique os detalhes.`)
+    }
+  }
+
   // Rejeitar convidado
   const rejectGuest = async (guestId: string) => {
     try {
@@ -609,12 +724,15 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
             setLastScannedCode(result.data)
             processQRCode(result.data)
             
-            // Reiniciar scanner após processamento
-            setTimeout(() => {
-              if (qrScannerRef.current) {
-                qrScannerRef.current.start()
-              }
-            }, 2000)
+            // Parar temporariamente e reiniciar após 2 segundos
+            if (qrScannerRef.current) {
+              qrScannerRef.current.stop()
+              setTimeout(() => {
+                if (qrScannerRef.current && isCameraActive) {
+                  qrScannerRef.current.start()
+                }
+              }, 2000)
+            }
           }
         },
         {
@@ -747,6 +865,36 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
       alert('Erro ao adicionar convidado')
     } finally {
       setIsAddingGuest(false)
+    }
+  }
+
+  // Zerar banco de dados
+  const clearAllData = async () => {
+    const confirmClear = confirm('⚠️ ATENÇÃO: Esta ação irá APAGAR TODOS os dados de convidados permanentemente. Esta ação NÃO pode ser desfeita. Tem certeza?')
+    if (!confirmClear) return
+
+    const doubleConfirm = confirm('Confirme novamente: Deseja realmente APAGAR TODOS os dados? Digite "CONFIRMAR" na próxima tela.')
+    if (!doubleConfirm) return
+
+    const finalConfirm = prompt('Digite "CONFIRMAR" para apagar todos os dados:')
+    if (finalConfirm !== 'CONFIRMAR') {
+      alert('Operação cancelada.')
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('guests')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000') // Deletar todos os registros
+
+      if (error) throw error
+
+      alert('✅ Todos os dados foram apagados com sucesso!')
+      loadGuests()
+    } catch (error) {
+      console.error('Erro ao limpar dados:', error)
+      alert('Erro ao limpar dados. Tente novamente.')
     }
   }
 
@@ -978,7 +1126,16 @@ Vai ser incrível! 🎵`
                     id="status-email"
                     type="email"
                     value={statusEmail}
-                    onChange={(e) => setStatusEmail(e.target.value)}
+                    onChange={(e) => {
+                      setStatusEmail(e.target.value)
+                      // Limpar erros quando usuário digita
+                      if (statusError) {
+                        setStatusError('')
+                      }
+                      if (statusGuest) {
+                        setStatusGuest(null)
+                      }
+                    }}
                     placeholder="seu@email.com"
                     className="flex-1"
                     onKeyPress={(e) => e.key === 'Enter' && statusEmail.trim() && checkStatusByEmail(statusEmail)}
@@ -996,6 +1153,15 @@ Vai ser incrível! 🎵`
                   </Button>
                 </div>
               </div>
+
+              {statusError && (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    {statusError}
+                  </AlertDescription>
+                </Alert>
+              )}
 
               {statusGuest && (
                 <Card className={`border-2 ${
@@ -1069,15 +1235,6 @@ Vai ser incrível! 🎵`
                     </div>
                   </CardContent>
                 </Card>
-              )}
-
-              {statusEmail && !statusGuest && !isCheckingStatus && (
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Nenhuma inscrição encontrada para este email. Verifique se digitou corretamente ou faça sua inscrição primeiro.
-                  </AlertDescription>
-                </Alert>
               )}
 
               <div className="flex gap-3">
@@ -1416,7 +1573,8 @@ Vai ser incrível! 🎵`
                     variant="outline"
                     size="sm"
                   >
-                    Atualizar Lista
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Atualizar
                   </Button>
                   <Button
                     onClick={() => {
@@ -1724,17 +1882,17 @@ Vai ser incrível! 🎵`
                   <Settings className="w-7 h-7" />
                   Painel Administrativo
                 </CardTitle>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
                     <DialogTrigger asChild>
                       <Button variant="outline" size="sm">
                         <Settings className="w-4 h-4 mr-2" />
-                        Configurações do App
+                        Configurações
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
-                        <DialogTitle className="text-xl">Configurações Completas do Sistema</DialogTitle>
+                        <DialogTitle className="text-xl">Configurações do Sistema</DialogTitle>
                       </DialogHeader>
                       <div className="space-y-6">
                         {/* Configurações do Evento */}
@@ -1792,18 +1950,7 @@ Vai ser incrível! 🎵`
                                 placeholder="Endereço completo com CEP"
                               />
                             </div>
-                          </CardContent>
-                        </Card>
-
-                        {/* Configurações de Comunicação */}
-                        <Card>
-                          <CardHeader>
-                            <CardTitle className="text-lg flex items-center gap-2">
-                              <MessageCircle className="w-5 h-5" />
-                              Comunicação e Contatos
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-4">
+                            
                             <div>
                               <Label htmlFor="group-link">Link do Grupo WhatsApp</Label>
                               <Input
@@ -1813,65 +1960,6 @@ Vai ser incrível! 🎵`
                                 placeholder="https://chat.whatsapp.com/..."
                                 className="mt-1"
                               />
-                              <p className="text-xs text-gray-500 mt-1">
-                                Este link aparecerá nos botões "Grupo Oficial"
-                              </p>
-                            </div>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <Label>Telefone de Contato</Label>
-                                <Input
-                                  value="(11) 99635-9550"
-                                  disabled
-                                  className="mt-1 bg-gray-50"
-                                />
-                                <p className="text-xs text-gray-500 mt-1">
-                                  Configurado no código (eventInfo.whatsapp)
-                                </p>
-                              </div>
-                              
-                              <div>
-                                <Label>Email de Contato</Label>
-                                <Input
-                                  value="gabriellima.art@gabriellima.art"
-                                  disabled
-                                  className="mt-1 bg-gray-50"
-                                />
-                                <p className="text-xs text-gray-500 mt-1">
-                                  Configurado no código (eventInfo.email)
-                                </p>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        {/* Estatísticas do App */}
-                        <Card>
-                          <CardHeader>
-                            <CardTitle className="text-lg flex items-center gap-2">
-                              <Users className="w-5 h-5" />
-                              Estatísticas do Sistema
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                              <div className="text-center p-3 bg-blue-50 rounded-lg">
-                                <p className="text-2xl font-bold text-blue-600">{guests.length}</p>
-                                <p className="text-sm text-blue-700">Total Inscritos</p>
-                              </div>
-                              <div className="text-center p-3 bg-green-50 rounded-lg">
-                                <p className="text-2xl font-bold text-green-600">{guests.filter(g => g.status === 'approved').length}</p>
-                                <p className="text-sm text-green-700">Aprovados</p>
-                              </div>
-                              <div className="text-center p-3 bg-yellow-50 rounded-lg">
-                                <p className="text-2xl font-bold text-yellow-600">{guests.filter(g => g.status === 'pending').length}</p>
-                                <p className="text-sm text-yellow-700">Pendentes</p>
-                              </div>
-                              <div className="text-center p-3 bg-purple-50 rounded-lg">
-                                <p className="text-2xl font-bold text-purple-600">{guests.filter(g => g.checked_in).length}</p>
-                                <p className="text-sm text-purple-700">Check-ins</p>
-                              </div>
                             </div>
                           </CardContent>
                         </Card>
@@ -1880,7 +1968,7 @@ Vai ser incrível! 🎵`
                       <div className="flex gap-2 pt-4 border-t">
                         <Button onClick={saveSettings} className="flex-1 bg-green-600 hover:bg-green-700">
                           <Send className="w-4 h-4 mr-2" />
-                          Salvar Configurações do Evento
+                          Salvar Configurações
                         </Button>
                         <Button variant="outline" onClick={() => setSettingsOpen(false)} className="flex-1">
                           Cancelar
@@ -1888,6 +1976,15 @@ Vai ser incrível! 🎵`
                       </div>
                     </DialogContent>
                   </Dialog>
+
+                  <Button
+                    onClick={clearAllData}
+                    variant="destructive"
+                    size="sm"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Zerar Dados
+                  </Button>
 
                   <Button
                     onClick={() => {
@@ -1960,9 +2057,41 @@ Vai ser incrível! 🎵`
                     <Alert>
                       <Loader2 className="h-4 w-4 animate-spin" />
                       <AlertDescription>
-                        Enviando email com QR Code...
+                        Enviando emails com QR Code...
                       </AlertDescription>
                     </Alert>
+                  )}
+
+                  {/* Seleção Múltipla e Ações em Lote */}
+                  {selectedGuests.length > 0 && (
+                    <Card className="bg-blue-50 border-blue-200">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <p className="text-blue-800 font-semibold">
+                            {selectedGuests.length} convidado(s) selecionado(s)
+                          </p>
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={approveMultipleGuests}
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700"
+                              disabled={isSendingEmail}
+                            >
+                              <Check className="w-4 h-4 mr-2" />
+                              Aprovar Selecionados
+                            </Button>
+                            <Button
+                              onClick={() => setSelectedGuests([])}
+                              size="sm"
+                              variant="outline"
+                            >
+                              <X className="w-4 h-4 mr-2" />
+                              Limpar Seleção
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
                   )}
 
                   {/* Adicionar Convidado */}
@@ -2015,13 +2144,26 @@ Vai ser incrível! 🎵`
                       <h3 className="text-lg font-semibold text-gray-900">
                         Convidados ({guests.length})
                       </h3>
-                      <Button
-                        onClick={loadGuests}
-                        variant="outline"
-                        size="sm"
-                      >
-                        Atualizar
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={() => {
+                            const pendingGuests = guests.filter(g => g.status === 'pending').map(g => g.id)
+                            setSelectedGuests(pendingGuests)
+                          }}
+                          variant="outline"
+                          size="sm"
+                        >
+                          Selecionar Pendentes
+                        </Button>
+                        <Button
+                          onClick={loadGuests}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                          Atualizar
+                        </Button>
+                      </div>
                     </div>
 
                     <div className="space-y-3">
@@ -2029,35 +2171,51 @@ Vai ser incrível! 🎵`
                         <Card key={guest.id} className="border border-gray-200">
                           <CardContent className="p-4">
                             <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-3 mb-2 flex-wrap">
-                                  <h4 className="font-semibold text-gray-900">
-                                    {guest.name}
-                                  </h4>
-                                  <Badge variant={
-                                    guest.status === 'approved' ? 'default' :
-                                    guest.status === 'pending' ? 'secondary' : 'destructive'
-                                  }>
-                                    {guest.status === 'approved' ? 'Aprovado' :
-                                     guest.status === 'pending' ? 'Pendente' : 'Rejeitado'}
-                                  </Badge>
-                                  {guest.checked_in && (
-                                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                                      <UserCheck className="w-3 h-3 mr-1" />
-                                      Check-in
-                                    </Badge>
-                                  )}
-                                </div>
+                              <div className="flex items-start gap-3">
+                                {/* Checkbox para seleção múltipla */}
+                                {guest.status === 'pending' && (
+                                  <Checkbox
+                                    checked={selectedGuests.includes(guest.id)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setSelectedGuests(prev => [...prev, guest.id])
+                                      } else {
+                                        setSelectedGuests(prev => prev.filter(id => id !== guest.id))
+                                      }
+                                    }}
+                                    className="mt-1"
+                                  />
+                                )}
                                 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-600">
-                                  <p><strong>Email:</strong> {guest.email}</p>
-                                  <p><strong>Telefone:</strong> {guest.phone}</p>
-                                  {guest.instagram && (
-                                    <p><strong>Instagram:</strong> {guest.instagram}</p>
-                                  )}
-                                  <p><strong>Acompanhante:</strong> {guest.has_companion ? 'Sim' : 'Não'}</p>
-                                  <p><strong>Termo de imagem:</strong> {guest.accepted_terms ? 'Aceito' : 'Não aceito'}</p>
-                                  <p><strong>Data:</strong> {new Date(guest.created_at).toLocaleDateString('pt-BR')}</p>
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-3 mb-2 flex-wrap">
+                                    <h4 className="font-semibold text-gray-900">
+                                      {guest.name}
+                                    </h4>
+                                    <Badge variant={
+                                      guest.status === 'approved' ? 'default' :
+                                      guest.status === 'pending' ? 'secondary' : 'destructive'
+                                    }>
+                                      {guest.status === 'approved' ? 'Aprovado' :
+                                       guest.status === 'pending' ? 'Pendente' : 'Rejeitado'}
+                                    </Badge>
+                                    {guest.checked_in && (
+                                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                        <UserCheck className="w-3 h-3 mr-1" />
+                                        Check-in
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-600">
+                                    <p><strong>Email:</strong> {guest.email}</p>
+                                    <p><strong>Telefone:</strong> {guest.phone}</p>
+                                    {guest.instagram && (
+                                      <p><strong>Instagram:</strong> {guest.instagram}</p>
+                                    )}
+                                    <p><strong>Acompanhante:</strong> {guest.has_companion ? 'Sim' : 'Não'}</p>
+                                    <p><strong>Data:</strong> {new Date(guest.created_at).toLocaleDateString('pt-BR')}</p>
+                                  </div>
                                 </div>
                               </div>
 
