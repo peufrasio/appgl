@@ -248,8 +248,12 @@ export async function POST(request: NextRequest) {
             
             <img src="data:image/png;base64,${qrCodeImage}" alt="QR Code de Acesso" class="qr-code">
             
+            <div class="qr-note">
+              💾 Seu QR Code também está anexado como PDF neste email
+            </div>
+            
             <div class="qr-fallback">
-              ⚠️ Caso o QR Code não seja exibido corretamente, clique <a href="data:image/png;base64,${qrCodeImage}" target="_blank" style="color: #e74c3c; text-decoration: underline;">aqui para visualizar seu código</a>
+              ⚠️ Caso o QR Code não seja exibido corretamente, verifique o arquivo PDF anexo ou salve uma captura de tela
             </div>
           </div>
 
@@ -258,7 +262,7 @@ export async function POST(request: NextRequest) {
             <ul>
               <li>Chegue com antecedência para facilitar o check-in.</li>
               <li>Apresente este QR Code na entrada.</li>
-              <li>Salve uma captura de tela ou acesse o link acima para abrir o código.</li>
+              <li>Salve uma captura de tela ou use o arquivo PDF anexo.</li>
               <li>Traga um documento com foto para confirmação.</li>
               <li>Vista-se adequadamente para as gravações.</li>
               <li>Mantenha o celular carregado para apresentar o código.</li>
@@ -284,7 +288,7 @@ export async function POST(request: NextRequest) {
     // Anexar PDF se fornecido
     if (pdfBuffer) {
       attachments.push({
-        filename: `qr-code-${name.replace(/\s+/g, '-')}.pdf`,
+        filename: `QR-Code-${name.replace(/\s+/g, '-')}.pdf`,
         content: Buffer.from(pdfBuffer, 'base64'),
         contentType: 'application/pdf'
       })
