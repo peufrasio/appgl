@@ -47,6 +47,7 @@ type Screen = 'welcome' | 'form' | 'success' | 'admin' | 'checkin'
 interface Guest {
   id: string
   created_at: string
+  updated_at?: string
   name: string
   email: string
   phone: string
