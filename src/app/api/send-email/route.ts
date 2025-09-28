@@ -270,7 +270,7 @@ export async function POST(request: NextRequest) {
             <div class="contact-info">
               <h4><span class="emoji">📞</span> Contato e Suporte:</h4>
               <p><strong>WhatsApp:</strong> (11) 99635-9550</p>
-              <p><strong>E-mail:</strong> contato@escalamusic.com.br</p>
+              <p><strong>E-mail:</strong> gabriellima.art@gabriellima.art</p>
               <p style="margin-top: 15px; color: #7f8c8d;">
                 <em>Entre em contato conosco se tiver qualquer dúvida!</em>
               </p>
@@ -309,7 +309,7 @@ export async function POST(request: NextRequest) {
 
     // Enviar email usando Resend
     const data = await resend.emails.send({
-      from: 'EscalaMusic <noreply@escalamusic.com.br>',
+      from: 'EscalaMusic <gabriellima.art@gabriellima.art>',
       to: [to],
       subject: `🎵 Confirmação de Presença - EP "Apaixonado Como Nunca" - ${name}`,
       html: emailHtml,
