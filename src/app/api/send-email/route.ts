@@ -3,8 +3,10 @@ import { Resend } from 'resend'
 
 export async function POST(request: NextRequest) {
   try {
-    // Verificar se a API key está configurada ANTES de inicializar o Resend
-    if (!process.env.RESEND_API_KEY) {
+    // Usar a API key fornecida diretamente
+    const RESEND_API_KEY = 're_E4YXbKsU_Gkqu3LkcWeqDaTCqRy1jMjh9'
+    
+    if (!RESEND_API_KEY) {
       console.error('RESEND_API_KEY não configurada')
       return NextResponse.json(
         { 
@@ -12,14 +14,37 @@ export async function POST(request: NextRequest) {
           success: false,
           timestamp: new Date().toISOString()
         },
-        { status: 500 }
+        { 
+          status: 500,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
       )
     }
 
-    // Inicializar Resend APENAS quando a API key estiver disponível
-    const resend = new Resend(process.env.RESEND_API_KEY)
+    // Verificar se o corpo da requisição é válido
+    let requestBody
+    try {
+      requestBody = await request.json()
+    } catch (parseError) {
+      console.error('Erro ao parsear JSON da requisição:', parseError)
+      return NextResponse.json(
+        { 
+          error: 'Dados da requisição inválidos',
+          success: false,
+          timestamp: new Date().toISOString()
+        },
+        { 
+          status: 400,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+    }
 
-    const { to, name, qrCodeData, qrCodeImage, pdfBuffer } = await request.json()
+    const { to, name, qrCodeData, qrCodeImage, pdfBuffer } = requestBody
 
     // Validar dados obrigatórios
     if (!to || !name || !qrCodeImage) {
@@ -29,9 +54,17 @@ export async function POST(request: NextRequest) {
           success: false,
           timestamp: new Date().toISOString()
         },
-        { status: 400 }
+        { 
+          status: 400,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
       )
     }
+
+    // Inicializar Resend com a API key
+    const resend = new Resend(RESEND_API_KEY)
 
     const emailHtml = `
       <!DOCTYPE html>
@@ -274,6 +307,7 @@ export async function POST(request: NextRequest) {
 
     console.log('Tentando enviar email para:', to)
 
+    // Enviar email usando Resend
     const data = await resend.emails.send({
       from: 'EscalaMusic <noreply@escalamusic.com.br>',
       to: [to],
@@ -284,12 +318,20 @@ export async function POST(request: NextRequest) {
 
     console.log('Email enviado com sucesso:', data)
 
-    return NextResponse.json({ 
-      success: true, 
-      data,
-      message: 'Email enviado com sucesso',
-      timestamp: new Date().toISOString()
-    })
+    return NextResponse.json(
+      { 
+        success: true, 
+        data,
+        message: 'Email enviado com sucesso',
+        timestamp: new Date().toISOString()
+      },
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    )
 
   } catch (error) {
     console.error('Erro detalhado ao enviar email:', error)
@@ -323,13 +365,13 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // Sempre retornar JSON válido
+    // SEMPRE retornar JSON válido, nunca HTML
     return NextResponse.json(
       { 
         error: errorMessage,
         success: false,
         timestamp: new Date().toISOString(),
-        details: process.env.NODE_ENV === 'development' ? error instanceof Error ? error.message : 'Erro desconhecido' : undefined
+        details: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.message : 'Erro desconhecido') : undefined
       },
       { 
         status: statusCode,
@@ -339,4 +381,53 @@ export async function POST(request: NextRequest) {
       }
     )
   }
+}
+
+// Garantir que outros métodos HTTP também retornem JSON
+export async function GET() {
+  return NextResponse.json(
+    { 
+      error: 'Método não permitido. Use POST para enviar emails.',
+      success: false,
+      timestamp: new Date().toISOString()
+    },
+    { 
+      status: 405,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    }
+  )
+}
+
+export async function PUT() {
+  return NextResponse.json(
+    { 
+      error: 'Método não permitido. Use POST para enviar emails.',
+      success: false,
+      timestamp: new Date().toISOString()
+    },
+    { 
+      status: 405,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    }
+  )
+}
+
+export async function DELETE() {
+  return NextResponse.json(
+    { 
+      error: 'Método não permitido. Use POST para enviar emails.',
+      success: false,
+      timestamp: new Date().toISOString()
+    },
+    { 
+      status: 405,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    }
+  )
 }
