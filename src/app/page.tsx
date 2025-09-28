@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import QRCode from 'qrcode'
+import QrScanner from 'qr-scanner'
 import { 
   Users, 
   Calendar, 
@@ -40,7 +41,9 @@ import {
   LogIn,
   Scan,
   AlertCircle,
-  Loader2
+  Loader2,
+  CameraOff,
+  Zap
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -114,6 +117,13 @@ export default function EventApp() {
   const [termsText, setTermsText] = useState('')
   const [qrScanInput, setQrScanInput] = useState('')
   const [isSendingEmail, setIsSendingEmail] = useState(false)
+  
+  // Estados para o scanner de QR Code
+  const [isCameraActive, setIsCameraActive] = useState(false)
+  const [cameraError, setCameraError] = useState('')
+  const [lastScannedCode, setLastScannedCode] = useState('')
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const qrScannerRef = useRef<QrScanner | null>(null)
 
   // Dados do evento
   const eventInfo = {
@@ -129,6 +139,15 @@ export default function EventApp() {
   useEffect(() => {
     loadSettings()
     generateTermsText()
+  }, [])
+
+  // Cleanup do scanner quando componente desmonta
+  useEffect(() => {
+    return () => {
+      if (qrScannerRef.current) {
+        qrScannerRef.current.destroy()
+      }
+    }
   }, [])
 
   // Gerar texto do termo automaticamente
@@ -442,6 +461,61 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
       console.error('Erro ao fazer check-in:', error)
       alert('Erro ao fazer check-in')
     }
+  }
+
+  // Iniciar scanner de câmera
+  const startCameraScanner = async () => {
+    if (!videoRef.current) return
+
+    try {
+      setCameraError('')
+      setIsCameraActive(true)
+
+      // Verificar se QrScanner está disponível
+      if (!QrScanner.hasCamera()) {
+        throw new Error('Nenhuma câmera encontrada no dispositivo')
+      }
+
+      // Criar nova instância do scanner
+      qrScannerRef.current = new QrScanner(
+        videoRef.current,
+        (result) => {
+          console.log('QR Code detectado:', result.data)
+          
+          // Evitar processar o mesmo código repetidamente
+          if (result.data !== lastScannedCode) {
+            setLastScannedCode(result.data)
+            processQRCode(result.data)
+            stopCameraScanner()
+          }
+        },
+        {
+          highlightScanRegion: true,
+          highlightCodeOutline: true,
+          preferredCamera: 'environment', // Câmera traseira
+          maxScansPerSecond: 5,
+        }
+      )
+
+      await qrScannerRef.current.start()
+      console.log('Scanner de câmera iniciado')
+      
+    } catch (error) {
+      console.error('Erro ao iniciar câmera:', error)
+      setCameraError(error instanceof Error ? error.message : 'Erro ao acessar câmera')
+      setIsCameraActive(false)
+    }
+  }
+
+  // Parar scanner de câmera
+  const stopCameraScanner = () => {
+    if (qrScannerRef.current) {
+      qrScannerRef.current.stop()
+      qrScannerRef.current.destroy()
+      qrScannerRef.current = null
+    }
+    setIsCameraActive(false)
+    setCameraError('')
   }
 
   // Processar QR Code escaneado
@@ -992,16 +1066,65 @@ Vai ser incrível! 🎵`
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {/* Scanner de QR Code */}
-                  <Card className="bg-blue-50 border-blue-200">
+                  {/* Scanner de QR Code com Câmera */}
+                  <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
                     <CardContent className="p-6">
                       <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center gap-2">
-                        <QrCode className="w-5 h-5" />
-                        Scanner de QR Code
+                        <Zap className="w-5 h-5" />
+                        Scanner de QR Code - Câmera
                       </h3>
+                      
                       <div className="space-y-4">
-                        <div>
-                          <Label htmlFor="qr-input">Cole ou digite o código QR:</Label>
+                        {/* Controles da Câmera */}
+                        <div className="flex gap-2">
+                          {!isCameraActive ? (
+                            <Button
+                              onClick={startCameraScanner}
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                            >
+                              <Camera className="w-4 h-4 mr-2" />
+                              Iniciar Câmera
+                            </Button>
+                          ) : (
+                            <Button
+                              onClick={stopCameraScanner}
+                              variant="destructive"
+                            >
+                              <CameraOff className="w-4 h-4 mr-2" />
+                              Parar Câmera
+                            </Button>
+                          )}
+                        </div>
+
+                        {/* Área da Câmera */}
+                        {isCameraActive && (
+                          <div className="relative">
+                            <video
+                              ref={videoRef}
+                              className="w-full max-w-md mx-auto rounded-lg border-2 border-blue-300 shadow-lg"
+                              style={{ aspectRatio: '1/1' }}
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                              <div className="border-2 border-green-400 bg-green-400/20 rounded-lg w-48 h-48 flex items-center justify-center">
+                                <QrCode className="w-8 h-8 text-green-600" />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Erro da Câmera */}
+                        {cameraError && (
+                          <Alert className="border-red-200 bg-red-50">
+                            <AlertCircle className="h-4 w-4 text-red-600" />
+                            <AlertDescription className="text-red-800">
+                              <strong>Erro na câmera:</strong> {cameraError}
+                            </AlertDescription>
+                          </Alert>
+                        )}
+
+                        {/* Scanner Manual (Fallback) */}
+                        <div className="border-t pt-4">
+                          <Label htmlFor="qr-input">Ou cole/digite o código manualmente:</Label>
                           <div className="flex gap-2 mt-1">
                             <Input
                               id="qr-input"
@@ -1020,10 +1143,11 @@ Vai ser incrível! 🎵`
                             </Button>
                           </div>
                         </div>
+
                         <Alert>
                           <AlertCircle className="h-4 w-4" />
                           <AlertDescription>
-                            <strong>Como usar:</strong> Escaneie o QR Code com qualquer app de câmera e cole o resultado aqui, ou digite diretamente o ID do convidado.
+                            <strong>Como usar:</strong> Clique em "Iniciar Câmera" e aponte para o QR Code do convidado. O check-in será feito automaticamente quando o código for detectado.
                           </AlertDescription>
                         </Alert>
                       </div>
