@@ -38,7 +38,9 @@ import {
   X,
   Shield,
   LogIn,
-  Scan
+  Scan,
+  AlertCircle,
+  Loader2
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -108,8 +110,10 @@ export default function EventApp() {
   const [isAddingGuest, setIsAddingGuest] = useState(false)
   const [qrScannerOpen, setQrScannerOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [tempGroupLink, setTempGroupLink] = useState('')
+  const [tempSettings, setTempSettings] = useState<AppSettings>(settings)
   const [termsText, setTermsText] = useState('')
+  const [qrScanInput, setQrScanInput] = useState('')
+  const [isSendingEmail, setIsSendingEmail] = useState(false)
 
   // Dados do evento
   const eventInfo = {
@@ -158,7 +162,7 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
 
       if (data) {
         setSettings(data)
-        setTempGroupLink(data.whatsapp_group_link || '')
+        setTempSettings(data)
       }
     } catch (error) {
       console.log('Configurações não encontradas, usando padrão')
@@ -171,15 +175,15 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
         .from('app_settings')
         .upsert({
           id: '1',
-          whatsapp_group_link: tempGroupLink,
-          event_name: settings.event_name,
-          event_date: settings.event_date,
-          event_location: settings.event_location,
-          event_address: settings.event_address
+          whatsapp_group_link: tempSettings.whatsapp_group_link,
+          event_name: tempSettings.event_name,
+          event_date: tempSettings.event_date,
+          event_location: tempSettings.event_location,
+          event_address: tempSettings.event_address
         })
 
       if (!error) {
-        setSettings(prev => ({ ...prev, whatsapp_group_link: tempGroupLink }))
+        setSettings(tempSettings)
         setSettingsOpen(false)
         alert('Configurações salvas com sucesso!')
       }
@@ -234,6 +238,50 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
     } catch (error) {
       console.error('Erro ao gerar QR Code:', error)
       return null
+    }
+  }
+
+  // Enviar email com QR Code
+  const sendEmailWithQRCode = async (guest: Guest, qrCode: string) => {
+    try {
+      setIsSendingEmail(true)
+      
+      // Converter QR Code para base64 (remover prefixo data:image/png;base64,)
+      const qrCodeBase64 = qrCode.replace(/^data:image\/png;base64,/, '')
+      
+      const response = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: guest.email,
+          name: guest.name,
+          qrCodeImage: qrCodeBase64,
+          qrCodeData: JSON.stringify({
+            id: guest.id,
+            name: guest.name,
+            email: guest.email,
+            event: eventInfo.title,
+            date: eventInfo.date
+          })
+        })
+      })
+
+      const result = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro ao enviar email')
+      }
+
+      console.log('Email enviado com sucesso:', result)
+      return true
+    } catch (error) {
+      console.error('Erro ao enviar email:', error)
+      alert(`Erro ao enviar email para ${guest.email}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
+      return false
+    } finally {
+      setIsSendingEmail(false)
     }
   }
 
@@ -344,9 +392,15 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
 
       if (error) throw error
       
-      // Simular envio de email (em produção, usar serviço real)
-      console.log(`Email enviado para ${guest.email} com QR Code`)
-      alert(`Convidado aprovado! Email enviado para ${guest.email}`)
+      // Enviar email com QR Code
+      if (qrCode) {
+        const emailSent = await sendEmailWithQRCode(guest, qrCode)
+        if (emailSent) {
+          alert(`Convidado aprovado! Email enviado para ${guest.email}`)
+        } else {
+          alert(`Convidado aprovado, mas houve erro no envio do email para ${guest.email}`)
+        }
+      }
       
       loadGuests()
     } catch (error) {
@@ -387,6 +441,46 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
     } catch (error) {
       console.error('Erro ao fazer check-in:', error)
       alert('Erro ao fazer check-in')
+    }
+  }
+
+  // Processar QR Code escaneado
+  const processQRCode = async (qrData: string) => {
+    try {
+      // Tentar parsear como JSON
+      let guestData
+      try {
+        guestData = JSON.parse(qrData)
+      } catch {
+        // Se não for JSON, tratar como ID simples
+        guestData = { id: qrData }
+      }
+
+      if (!guestData.id) {
+        throw new Error('QR Code inválido - ID não encontrado')
+      }
+
+      // Buscar convidado no banco
+      const guest = guests.find(g => g.id === guestData.id)
+      if (!guest) {
+        throw new Error('Convidado não encontrado')
+      }
+
+      if (guest.status !== 'approved') {
+        throw new Error('Convidado não aprovado')
+      }
+
+      if (guest.checked_in) {
+        throw new Error('Check-in já realizado anteriormente')
+      }
+
+      // Realizar check-in
+      await checkInGuest(guest.id)
+      setQrScanInput('')
+      
+    } catch (error) {
+      console.error('Erro ao processar QR Code:', error)
+      alert(error instanceof Error ? error.message : 'Erro ao processar QR Code')
     }
   }
 
@@ -898,6 +992,44 @@ Vai ser incrível! 🎵`
                 </div>
               ) : (
                 <div className="space-y-6">
+                  {/* Scanner de QR Code */}
+                  <Card className="bg-blue-50 border-blue-200">
+                    <CardContent className="p-6">
+                      <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center gap-2">
+                        <QrCode className="w-5 h-5" />
+                        Scanner de QR Code
+                      </h3>
+                      <div className="space-y-4">
+                        <div>
+                          <Label htmlFor="qr-input">Cole ou digite o código QR:</Label>
+                          <div className="flex gap-2 mt-1">
+                            <Input
+                              id="qr-input"
+                              value={qrScanInput}
+                              onChange={(e) => setQrScanInput(e.target.value)}
+                              placeholder="Cole aqui o conteúdo do QR Code ou ID do convidado"
+                              className="flex-1"
+                            />
+                            <Button
+                              onClick={() => processQRCode(qrScanInput)}
+                              disabled={!qrScanInput.trim()}
+                              className="bg-blue-600 hover:bg-blue-700"
+                            >
+                              <Scan className="w-4 h-4 mr-2" />
+                              Processar
+                            </Button>
+                          </div>
+                        </div>
+                        <Alert>
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            <strong>Como usar:</strong> Escaneie o QR Code com qualquer app de câmera e cole o resultado aqui, ou digite diretamente o ID do convidado.
+                          </AlertDescription>
+                        </Alert>
+                      </div>
+                    </CardContent>
+                  </Card>
+
                   {/* Estatísticas Simplificadas */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <Card className="bg-green-50 border-green-200">
@@ -963,6 +1095,7 @@ Vai ser incrível! 🎵`
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-600">
                                   <p><strong>Email:</strong> {guest.email}</p>
                                   <p><strong>Telefone:</strong> {guest.phone}</p>
+                                  <p><strong>ID:</strong> {guest.id}</p>
                                   {guest.checked_in && (
                                     <p><strong>Check-in:</strong> {new Date(guest.created_at).toLocaleString('pt-BR')}</p>
                                   )}
@@ -999,8 +1132,11 @@ Vai ser incrível! 🎵`
                                           alt="QR Code" 
                                           className="mx-auto mb-4 border rounded-lg"
                                         />
-                                        <p className="text-sm text-gray-600">
+                                        <p className="text-sm text-gray-600 mb-2">
                                           QR Code para acesso ao evento
+                                        </p>
+                                        <p className="text-xs text-gray-500 font-mono bg-gray-100 p-2 rounded">
+                                          ID: {guest.id}
                                         </p>
                                       </div>
                                     </DialogContent>
@@ -1092,37 +1228,290 @@ Vai ser incrível! 🎵`
                   <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
                     <DialogTrigger asChild>
                       <Button variant="outline" size="sm">
-                        <Link className="w-4 h-4 mr-2" />
-                        Configurações
+                        <Settings className="w-4 h-4 mr-2" />
+                        Configurações do App
                       </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
-                        <DialogTitle>Configurações do Evento</DialogTitle>
+                        <DialogTitle className="text-xl">Configurações Completas do Sistema</DialogTitle>
                       </DialogHeader>
-                      <div className="space-y-4">
-                        <div>
-                          <Label htmlFor="group-link">Link do Grupo WhatsApp</Label>
-                          <Input
-                            id="group-link"
-                            value={tempGroupLink}
-                            onChange={(e) => setTempGroupLink(e.target.value)}
-                            placeholder="https://chat.whatsapp.com/..."
-                            className="mt-1"
-                          />
-                          <p className="text-xs text-gray-500 mt-1">
-                            Este link aparecerá nos botões "Grupo Oficial"
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button onClick={saveSettings} className="flex-1">
-                            <Send className="w-4 h-4 mr-2" />
-                            Salvar
-                          </Button>
-                          <Button variant="outline" onClick={() => setSettingsOpen(false)} className="flex-1">
-                            Cancelar
-                          </Button>
-                        </div>
+                      <div className="space-y-6">
+                        {/* Configurações do Evento */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-lg flex items-center gap-2">
+                              <Calendar className="w-5 h-5" />
+                              Informações do Evento
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div>
+                              <Label htmlFor="event-name">Nome do Evento</Label>
+                              <Input
+                                id="event-name"
+                                value={tempSettings.event_name}
+                                onChange={(e) => setTempSettings(prev => ({ ...prev, event_name: e.target.value }))}
+                                className="mt-1"
+                                placeholder="Nome completo do evento"
+                              />
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <Label htmlFor="event-date">Data e Horário</Label>
+                                <Input
+                                  id="event-date"
+                                  value={tempSettings.event_date}
+                                  onChange={(e) => setTempSettings(prev => ({ ...prev, event_date: e.target.value }))}
+                                  className="mt-1"
+                                  placeholder="Ex: 09/10 às 15h"
+                                />
+                              </div>
+                              
+                              <div>
+                                <Label htmlFor="event-location">Local do Evento</Label>
+                                <Input
+                                  id="event-location"
+                                  value={tempSettings.event_location}
+                                  onChange={(e) => setTempSettings(prev => ({ ...prev, event_location: e.target.value }))}
+                                  className="mt-1"
+                                  placeholder="Nome do local"
+                                />
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <Label htmlFor="event-address">Endereço Completo</Label>
+                              <Textarea
+                                id="event-address"
+                                value={tempSettings.event_address}
+                                onChange={(e) => setTempSettings(prev => ({ ...prev, event_address: e.target.value }))}
+                                className="mt-1"
+                                rows={3}
+                                placeholder="Endereço completo com CEP"
+                              />
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        {/* Configurações de Comunicação */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-lg flex items-center gap-2">
+                              <MessageCircle className="w-5 h-5" />
+                              Comunicação e Contatos
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div>
+                              <Label htmlFor="group-link">Link do Grupo WhatsApp</Label>
+                              <Input
+                                id="group-link"
+                                value={tempSettings.whatsapp_group_link || ''}
+                                onChange={(e) => setTempSettings(prev => ({ ...prev, whatsapp_group_link: e.target.value }))}
+                                placeholder="https://chat.whatsapp.com/..."
+                                className="mt-1"
+                              />
+                              <p className="text-xs text-gray-500 mt-1">
+                                Este link aparecerá nos botões "Grupo Oficial"
+                              </p>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <Label>Telefone de Contato</Label>
+                                <Input
+                                  value="(11) 99635-9550"
+                                  disabled
+                                  className="mt-1 bg-gray-50"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Configurado no código (eventInfo.whatsapp)
+                                </p>
+                              </div>
+                              
+                              <div>
+                                <Label>Email de Contato</Label>
+                                <Input
+                                  value="contato@escalamusic.com.br"
+                                  disabled
+                                  className="mt-1 bg-gray-50"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Configurado no código (eventInfo.email)
+                                </p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        {/* Configurações de Email */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-lg flex items-center gap-2">
+                              <Mail className="w-5 h-5" />
+                              Configurações de Email
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <Alert>
+                              <AlertCircle className="h-4 w-4" />
+                              <AlertDescription>
+                                <strong>Status do Email:</strong> {process.env.RESEND_API_KEY ? '✅ Configurado' : '❌ Não configurado'}
+                              </AlertDescription>
+                            </Alert>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <Label>Provedor de Email</Label>
+                                <Input
+                                  value="Resend"
+                                  disabled
+                                  className="mt-1 bg-gray-50"
+                                />
+                              </div>
+                              
+                              <div>
+                                <Label>Email Remetente</Label>
+                                <Input
+                                  value="EscalaMusic <noreply@escalamusic.com.br>"
+                                  disabled
+                                  className="mt-1 bg-gray-50"
+                                />
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <Label>API Key do Resend</Label>
+                              <Input
+                                value={process.env.RESEND_API_KEY ? `${process.env.RESEND_API_KEY.substring(0, 8)}...` : 'Não configurada'}
+                                disabled
+                                className="mt-1 bg-gray-50"
+                                type="password"
+                              />
+                              <p className="text-xs text-gray-500 mt-1">
+                                Configurada nas variáveis de ambiente (.env.local)
+                              </p>
+                            </div>
+
+                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                              <h4 className="font-semibold text-blue-900 mb-2">Como configurar o email:</h4>
+                              <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+                                <li>Acesse <a href="https://resend.com" target="_blank" className="underline">resend.com</a> e crie uma conta</li>
+                                <li>Gere uma API Key no dashboard</li>
+                                <li>Adicione a chave no arquivo .env.local: RESEND_API_KEY="sua_chave_aqui"</li>
+                                <li>Reinicie o servidor para aplicar as mudanças</li>
+                              </ol>
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        {/* Configurações do Sistema */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-lg flex items-center gap-2">
+                              <Shield className="w-5 h-5" />
+                              Configurações do Sistema
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <Label>Senha Admin</Label>
+                                <Input
+                                  value="admin123"
+                                  disabled
+                                  className="mt-1 bg-gray-50"
+                                  type="password"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Configurada no código (handleAdminLogin)
+                                </p>
+                              </div>
+                              
+                              <div>
+                                <Label>Senha Check-in</Label>
+                                <Input
+                                  value="checkin123"
+                                  disabled
+                                  className="mt-1 bg-gray-50"
+                                  type="password"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Configurada no código (handleCheckinLogin)
+                                </p>
+                              </div>
+                            </div>
+
+                            <div>
+                              <Label>Banco de Dados</Label>
+                              <Input
+                                value={process.env.NEXT_PUBLIC_SUPABASE_URL ? 'Supabase - Conectado' : 'Não configurado'}
+                                disabled
+                                className="mt-1 bg-gray-50"
+                              />
+                              <p className="text-xs text-gray-500 mt-1">
+                                {process.env.NEXT_PUBLIC_SUPABASE_URL ? 
+                                  `URL: ${process.env.NEXT_PUBLIC_SUPABASE_URL}` : 
+                                  'Configure NEXT_PUBLIC_SUPABASE_URL no .env.local'
+                                }
+                              </p>
+                            </div>
+
+                            <div>
+                              <Label>Ambiente</Label>
+                              <Input
+                                value={process.env.NODE_ENV || 'development'}
+                                disabled
+                                className="mt-1 bg-gray-50"
+                              />
+                              <p className="text-xs text-gray-500 mt-1">
+                                Ambiente atual de execução
+                              </p>
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        {/* Estatísticas do App */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-lg flex items-center gap-2">
+                              <Users className="w-5 h-5" />
+                              Estatísticas do Sistema
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                              <div className="text-center p-3 bg-blue-50 rounded-lg">
+                                <p className="text-2xl font-bold text-blue-600">{guests.length}</p>
+                                <p className="text-sm text-blue-700">Total Inscritos</p>
+                              </div>
+                              <div className="text-center p-3 bg-green-50 rounded-lg">
+                                <p className="text-2xl font-bold text-green-600">{guests.filter(g => g.status === 'approved').length}</p>
+                                <p className="text-sm text-green-700">Aprovados</p>
+                              </div>
+                              <div className="text-center p-3 bg-yellow-50 rounded-lg">
+                                <p className="text-2xl font-bold text-yellow-600">{guests.filter(g => g.status === 'pending').length}</p>
+                                <p className="text-sm text-yellow-700">Pendentes</p>
+                              </div>
+                              <div className="text-center p-3 bg-purple-50 rounded-lg">
+                                <p className="text-2xl font-bold text-purple-600">{guests.filter(g => g.checked_in).length}</p>
+                                <p className="text-sm text-purple-700">Check-ins</p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                      
+                      <div className="flex gap-2 pt-4 border-t">
+                        <Button onClick={saveSettings} className="flex-1 bg-green-600 hover:bg-green-700">
+                          <Send className="w-4 h-4 mr-2" />
+                          Salvar Configurações do Evento
+                        </Button>
+                        <Button variant="outline" onClick={() => setSettingsOpen(false)} className="flex-1">
+                          Cancelar
+                        </Button>
                       </div>
                     </DialogContent>
                   </Dialog>
@@ -1192,6 +1581,16 @@ Vai ser incrível! 🎵`
                       </CardContent>
                     </Card>
                   </div>
+
+                  {/* Status do Email */}
+                  {isSendingEmail && (
+                    <Alert>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <AlertDescription>
+                        Enviando email com QR Code...
+                      </AlertDescription>
+                    </Alert>
+                  )}
 
                   {/* Adicionar Convidado */}
                   <Card className="bg-gray-50 border-gray-200">
@@ -1296,6 +1695,7 @@ Vai ser incrível! 🎵`
                                       onClick={() => approveGuest(guest.id)}
                                       size="sm"
                                       className="bg-green-600 hover:bg-green-700 text-white"
+                                      disabled={isSendingEmail}
                                     >
                                       <Check className="w-4 h-4 mr-1" />
                                       Aprovar
