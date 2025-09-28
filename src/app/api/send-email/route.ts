@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 
+const resend = new Resend(process.env.RESEND_API_KEY)
+
 export async function POST(request: NextRequest) {
   try {
-    // Usar a API key fornecida diretamente
-    const RESEND_API_KEY = 're_E4YXbKsU_Gkqu3LkcWeqDaTCqRy1jMjh9'
-    
-    if (!RESEND_API_KEY) {
+    const { to, name, qrCodeData, qrCodeImage, pdfBuffer } = await request.json()
+
+    // Verificar se a API key está configurada
+    if (!process.env.RESEND_API_KEY) {
       console.error('RESEND_API_KEY não configurada')
       return NextResponse.json(
         { 
@@ -14,37 +16,9 @@ export async function POST(request: NextRequest) {
           success: false,
           timestamp: new Date().toISOString()
         },
-        { 
-          status: 500,
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
+        { status: 500 }
       )
     }
-
-    // Verificar se o corpo da requisição é válido
-    let requestBody
-    try {
-      requestBody = await request.json()
-    } catch (parseError) {
-      console.error('Erro ao parsear JSON da requisição:', parseError)
-      return NextResponse.json(
-        { 
-          error: 'Dados da requisição inválidos',
-          success: false,
-          timestamp: new Date().toISOString()
-        },
-        { 
-          status: 400,
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
-      )
-    }
-
-    const { to, name, qrCodeData, qrCodeImage, pdfBuffer } = requestBody
 
     // Validar dados obrigatórios
     if (!to || !name || !qrCodeImage) {
@@ -54,17 +28,9 @@ export async function POST(request: NextRequest) {
           success: false,
           timestamp: new Date().toISOString()
         },
-        { 
-          status: 400,
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
+        { status: 400 }
       )
     }
-
-    // Inicializar Resend com a API key
-    const resend = new Resend(RESEND_API_KEY)
 
     const emailHtml = `
       <!DOCTYPE html>
@@ -72,10 +38,10 @@ export async function POST(request: NextRequest) {
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>🎵 Confirmação de Presença – Gravação do EP "Apaixonado Como Nunca"</title>
+        <title>Confirmação de Presença - EscalaMusic</title>
         <style>
           body {
-            font-family: Arial, sans-serif;
+            font-family: 'Arial', sans-serif;
             line-height: 1.6;
             color: #333;
             max-width: 600px;
@@ -86,57 +52,63 @@ export async function POST(request: NextRequest) {
           .container {
             background: white;
             border-radius: 15px;
-            padding: 30px;
+            padding: 40px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.1);
           }
           .header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 40px;
+            padding-bottom: 30px;
+            border-bottom: 3px solid #e9ecef;
+          }
+          .logo {
+            max-width: 200px;
+            height: auto;
+            margin-bottom: 20px;
           }
           .title {
             color: #2c3e50;
-            font-size: 24px;
+            font-size: 28px;
             font-weight: bold;
-            margin: 0 0 20px 0;
+            margin: 0;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+          }
+          .subtitle {
+            color: #7f8c8d;
+            font-size: 18px;
+            margin: 10px 0 0 0;
+          }
+          .content {
+            margin: 30px 0;
           }
           .greeting {
-            font-size: 18px;
+            font-size: 20px;
             color: #2c3e50;
-            margin-bottom: 15px;
-          }
-          .confirmation {
-            font-size: 16px;
+            font-weight: bold;
             margin-bottom: 20px;
+          }
+          .message {
+            font-size: 16px;
+            line-height: 1.8;
+            margin-bottom: 25px;
             color: #34495e;
           }
-          .highlight {
-            background: #e8f5e8;
-            padding: 15px;
-            border-radius: 10px;
-            margin: 20px 0;
-            text-align: center;
-            font-weight: bold;
-            color: #2c3e50;
-          }
-          .event-details {
-            background: #f8f9fa;
+          .event-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
             padding: 25px;
             border-radius: 12px;
-            margin: 25px 0;
-            border-left: 5px solid #667eea;
+            margin: 30px 0;
+            text-align: center;
           }
-          .event-details h3 {
-            color: #2c3e50;
+          .event-info h3 {
             margin: 0 0 15px 0;
-            font-size: 20px;
+            font-size: 22px;
+            font-weight: bold;
           }
-          .detail-item {
-            margin-bottom: 10px;
+          .event-details {
             font-size: 16px;
-            color: #34495e;
-          }
-          .detail-item strong {
-            color: #2c3e50;
+            line-height: 1.6;
           }
           .qr-section {
             background: #f8f9fa;
@@ -146,11 +118,6 @@ export async function POST(request: NextRequest) {
             margin: 30px 0;
             border: 2px dashed #dee2e6;
           }
-          .qr-section h3 {
-            color: #2c3e50;
-            margin: 0 0 15px 0;
-            font-size: 20px;
-          }
           .qr-code {
             max-width: 250px;
             height: auto;
@@ -158,18 +125,6 @@ export async function POST(request: NextRequest) {
             border: 3px solid white;
             border-radius: 10px;
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-          }
-          .qr-note {
-            color: #7f8c8d;
-            font-size: 14px;
-            margin-top: 15px;
-            font-weight: bold;
-          }
-          .qr-fallback {
-            color: #e74c3c;
-            font-size: 14px;
-            margin-top: 10px;
-            font-weight: bold;
           }
           .instructions {
             background: #e8f5e8;
@@ -196,86 +151,108 @@ export async function POST(request: NextRequest) {
             margin-top: 40px;
             padding-top: 30px;
             border-top: 2px solid #e9ecef;
+            color: #7f8c8d;
+          }
+          .contact-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+          }
+          .contact-info h4 {
+            color: #2c3e50;
+            margin: 0 0 15px 0;
+          }
+          .highlight {
+            background: linear-gradient(120deg, #a8edea 0%, #fed6e3 100%);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+            font-weight: bold;
             color: #2c3e50;
           }
-          .brand {
-            font-weight: bold;
-            font-size: 18px;
-            margin-bottom: 5px;
-          }
-          .tagline {
-            font-size: 14px;
-            color: #7f8c8d;
-            font-style: italic;
+          .emoji {
+            font-size: 24px;
+            margin: 0 5px;
           }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
-            <div class="title">🎵 Confirmação de Presença – Gravação do EP "Apaixonado Como Nunca"</div>
+            <img src="https://i.postimg.cc/XvsKmNKW/ESCALA-MUSIC-NOVO-LOGO.png" alt="EscalaMusic Logo" class="logo">
+            <h1 class="title">🎵 Confirmação de Presença</h1>
+            <p class="subtitle">Gravação do EP "Apaixonado Como Nunca"</p>
           </div>
 
-          <div class="greeting">
-            Olá, ${name}!
-          </div>
-
-          <div class="confirmation">
-            Parabéns! Sua presença foi <strong>CONFIRMADA</strong> para a gravação do EP "Apaixonado Como Nunca" 🎉
-          </div>
-
-          <div class="highlight">
-            ✨ Vai ser incrível ter você com a gente nesse momento especial! ✨
-          </div>
-
-          <div class="event-details">
-            <h3>🎬 Detalhes do Evento</h3>
-            <div class="detail-item">
-              <strong>📅 Data:</strong> 09/10 às 15h
+          <div class="content">
+            <div class="greeting">
+              Olá, ${name}! <span class="emoji">👋</span>
             </div>
-            <div class="detail-item">
-              <strong>📍 Local:</strong> Prainha Natal – ao lado do Hotel Imirá
-            </div>
-            <div class="detail-item">
-              <strong>🗺️ Endereço:</strong> Av. Senador Dinarte Mariz, Via Costeira, 4077 - B, Natal - RN, 59090-002
-            </div>
-          </div>
 
-          <div class="qr-section">
-            <h3>📱 Seu QR Code de Acesso</h3>
-            <p>Apresente o código abaixo na entrada do evento.</p>
-            <p style="font-size: 14px; color: #7f8c8d;">(Código único e intransferível)</p>
-            
-            <img src="data:image/png;base64,${qrCodeImage}" alt="QR Code de Acesso" class="qr-code">
-            
-            <div class="qr-note">
-              💾 Seu QR Code também está anexado como PDF neste email
+            <div class="message">
+              <strong>Parabéns!</strong> Sua presença foi <span style="color: #28a745; font-weight: bold;">CONFIRMADA</span> para a gravação do EP "Apaixonado Como Nunca"! <span class="emoji">🎉</span>
             </div>
-            
-            <div class="qr-fallback">
-              ⚠️ Caso o QR Code não seja exibido corretamente, verifique o arquivo PDF anexo ou salve uma captura de tela
+
+            <div class="highlight">
+              <span class="emoji">✨</span> Vai ser lindo ter você com a gente neste momento especial! <span class="emoji">✨</span>
             </div>
-          </div>
 
-          <div class="instructions">
-            <h4>📋 Instruções Importantes</h4>
-            <ul>
-              <li>Chegue com antecedência para facilitar o check-in.</li>
-              <li>Apresente este QR Code na entrada.</li>
-              <li>Salve uma captura de tela ou use o arquivo PDF anexo.</li>
-              <li>Traga um documento com foto para confirmação.</li>
-              <li>Vista-se adequadamente para as gravações.</li>
-              <li>Mantenha o celular carregado para apresentar o código.</li>
-            </ul>
-          </div>
+            <div class="event-info">
+              <h3><span class="emoji">🎬</span> Detalhes do Evento</h3>
+              <div class="event-details">
+                <strong>📅 Data:</strong> 09/10 às 15h<br>
+                <strong>📍 Local:</strong> Prainha Natal – ao lado do Hotel Imirá<br>
+                <strong>🗺️ Endereço:</strong> Av. Senador Dinarte Mariz, Via Costeira, 4077 - B, Natal - RN, 59090-002
+              </div>
+            </div>
 
-          <div class="highlight">
-            🎵 Prepare-se para viver momentos inesquecíveis! 🎵
+            <div class="qr-section">
+              <h3 style="color: #2c3e50; margin-bottom: 15px;">
+                <span class="emoji">📱</span> Seu QR Code de Acesso
+              </h3>
+              <p style="color: #7f8c8d; margin-bottom: 20px;">
+                Apresente este código na entrada do evento
+              </p>
+              <img src="data:image/png;base64,${qrCodeImage}" alt="QR Code de Acesso" class="qr-code">
+              <p style="color: #7f8c8d; font-size: 14px; margin-top: 15px;">
+                <strong>Código único e intransferível</strong>
+              </p>
+            </div>
+
+            <div class="instructions">
+              <h4><span class="emoji">📋</span> Instruções Importantes:</h4>
+              <ul>
+                <li><strong>Chegue com antecedência</strong> para facilitar o check-in</li>
+                <li><strong>Apresente este QR Code</strong> na entrada do evento</li>
+                <li><strong>Guarde uma captura de tela</strong> como backup</li>
+                <li><strong>Traga documento com foto</strong> para confirmação</li>
+                <li><strong>Vista-se adequadamente</strong> para as gravações</li>
+                <li><strong>Mantenha o celular carregado</strong> para apresentar o QR Code</li>
+              </ul>
+            </div>
+
+            <div class="contact-info">
+              <h4><span class="emoji">📞</span> Contato e Suporte:</h4>
+              <p><strong>WhatsApp:</strong> (11) 99635-9550</p>
+              <p><strong>E-mail:</strong> contato@escalamusic.com.br</p>
+              <p style="margin-top: 15px; color: #7f8c8d;">
+                <em>Entre em contato conosco se tiver qualquer dúvida!</em>
+              </p>
+            </div>
+
+            <div class="highlight">
+              <span class="emoji">🎵</span> Prepare-se para viver momentos inesquecíveis! <span class="emoji">🎵</span>
+            </div>
           </div>
 
           <div class="footer">
-            <div class="brand">EscalaMusic</div>
-            <div class="tagline">ESCALANDO SUCESSOS</div>
+            <p><strong>EscalaMusic</strong></p>
+            <p>Criando momentos musicais únicos</p>
+            <p style="font-size: 12px; margin-top: 20px;">
+              Este e-mail foi enviado automaticamente. Por favor, não responda.
+            </p>
           </div>
         </div>
       </body>
@@ -288,7 +265,7 @@ export async function POST(request: NextRequest) {
     // Anexar PDF se fornecido
     if (pdfBuffer) {
       attachments.push({
-        filename: `QR-Code-${name.replace(/\s+/g, '-')}.pdf`,
+        filename: `qr-code-${name.replace(/\s+/g, '-')}.pdf`,
         content: Buffer.from(pdfBuffer, 'base64'),
         contentType: 'application/pdf'
       })
@@ -296,31 +273,22 @@ export async function POST(request: NextRequest) {
 
     console.log('Tentando enviar email para:', to)
 
-    // Enviar email usando Resend
     const data = await resend.emails.send({
-      from: 'EscalaMusic <gabriellima.art@gabriellima.art>',
+      from: 'EscalaMusic <noreply@escalamusic.com.br>',
       to: [to],
-      subject: `🎵 Confirmação de Presença – Gravação do EP "Apaixonado Como Nunca"`,
+      subject: `🎵 Confirmação de Presença - EP "Apaixonado Como Nunca" - ${name}`,
       html: emailHtml,
       attachments: attachments.length > 0 ? attachments : undefined,
     })
 
     console.log('Email enviado com sucesso:', data)
 
-    return NextResponse.json(
-      { 
-        success: true, 
-        data,
-        message: 'Email enviado com sucesso',
-        timestamp: new Date().toISOString()
-      },
-      {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      }
-    )
+    return NextResponse.json({ 
+      success: true, 
+      data,
+      message: 'Email enviado com sucesso',
+      timestamp: new Date().toISOString()
+    })
 
   } catch (error) {
     console.error('Erro detalhado ao enviar email:', error)
@@ -354,13 +322,13 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // SEMPRE retornar JSON válido, nunca HTML
+    // Sempre retornar JSON válido
     return NextResponse.json(
       { 
         error: errorMessage,
         success: false,
         timestamp: new Date().toISOString(),
-        details: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.message : 'Erro desconhecido') : undefined
+        details: process.env.NODE_ENV === 'development' ? error instanceof Error ? error.message : 'Erro desconhecido' : undefined
       },
       { 
         status: statusCode,
@@ -370,53 +338,4 @@ export async function POST(request: NextRequest) {
       }
     )
   }
-}
-
-// Garantir que outros métodos HTTP também retornem JSON
-export async function GET() {
-  return NextResponse.json(
-    { 
-      error: 'Método não permitido. Use POST para enviar emails.',
-      success: false,
-      timestamp: new Date().toISOString()
-    },
-    { 
-      status: 405,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    }
-  )
-}
-
-export async function PUT() {
-  return NextResponse.json(
-    { 
-      error: 'Método não permitido. Use POST para enviar emails.',
-      success: false,
-      timestamp: new Date().toISOString()
-    },
-    { 
-      status: 405,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    }
-  )
-}
-
-export async function DELETE() {
-  return NextResponse.json(
-    { 
-      error: 'Método não permitido. Use POST para enviar emails.',
-      success: false,
-      timestamp: new Date().toISOString()
-    },
-    { 
-      status: 405,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    }
-  )
 }
