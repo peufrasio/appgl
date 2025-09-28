@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import QRCode from 'qrcode'
+import QrScanner from 'qr-scanner'
 import { 
   Users, 
   Calendar, 
@@ -45,7 +46,9 @@ import {
   Zap,
   Search,
   Navigation,
-  ExternalLink
+  ExternalLink,
+  Volume2,
+  VolumeX
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -125,11 +128,18 @@ export default function EventApp() {
   const [cameraError, setCameraError] = useState('')
   const [lastScannedCode, setLastScannedCode] = useState('')
   const videoRef = useRef<HTMLVideoElement>(null)
+  const qrScannerRef = useRef<QrScanner | null>(null)
 
   // Estados para verificação de status
   const [statusEmail, setStatusEmail] = useState('')
   const [statusGuest, setStatusGuest] = useState<Guest | null>(null)
   const [isCheckingStatus, setIsCheckingStatus] = useState(false)
+
+  // Estados para acesso administrativo via URL
+  const [showAdminAccess, setShowAdminAccess] = useState(false)
+
+  // Estados para sons
+  const [soundEnabled, setSoundEnabled] = useState(true)
 
   // Dados do evento
   const eventInfo = {
@@ -141,18 +151,75 @@ export default function EventApp() {
     email: 'gabriellima.art@gabriellima.art'
   }
 
+  // Funções de som
+  const playSuccessSound = () => {
+    if (!soundEnabled) return
+    try {
+      // Som de sucesso (frequência alta)
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+      
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+      
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime)
+      oscillator.frequency.setValueAtTime(1000, audioContext.currentTime + 0.1)
+      
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3)
+      
+      oscillator.start(audioContext.currentTime)
+      oscillator.stop(audioContext.currentTime + 0.3)
+    } catch (error) {
+      console.log('Erro ao reproduzir som de sucesso:', error)
+    }
+  }
+
+  const playErrorSound = () => {
+    if (!soundEnabled) return
+    try {
+      // Som de erro (frequência baixa)
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+      
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+      
+      oscillator.frequency.setValueAtTime(300, audioContext.currentTime)
+      oscillator.frequency.setValueAtTime(200, audioContext.currentTime + 0.1)
+      
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5)
+      
+      oscillator.start(audioContext.currentTime)
+      oscillator.stop(audioContext.currentTime + 0.5)
+    } catch (error) {
+      console.log('Erro ao reproduzir som de erro:', error)
+    }
+  }
+
   // Inicializar banco de dados
   useEffect(() => {
     loadSettings()
     generateTermsText()
+    
+    // Verificar se há parâmetros de URL para acesso administrativo
+    const urlParams = new URLSearchParams(window.location.search)
+    if (urlParams.get('admin') === 'true') {
+      setCurrentScreen('admin')
+    } else if (urlParams.get('checkin') === 'true') {
+      setCurrentScreen('checkin')
+    }
   }, [])
 
   // Cleanup da câmera quando componente desmonta
   useEffect(() => {
     return () => {
-      if (videoRef.current?.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream
-        stream.getTracks().forEach(track => track.stop())
+      if (qrScannerRef.current) {
+        qrScannerRef.current.destroy()
+        qrScannerRef.current = null
       }
     }
   }, [])
@@ -496,14 +563,16 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
 
       if (error) throw error
       loadGuests()
+      playSuccessSound() // Som de sucesso
       alert('Check-in realizado com sucesso!')
     } catch (error) {
       console.error('Erro ao fazer check-in:', error)
+      playErrorSound() // Som de erro
       alert('Erro ao fazer check-in')
     }
   }
 
-  // Iniciar scanner de câmera - CORRIGIDO
+  // Iniciar scanner de câmera - CORRIGIDO COM QR-SCANNER
   const startCameraScanner = async () => {
     try {
       setCameraError('')
@@ -521,31 +590,43 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
         throw new Error('Elemento de vídeo não encontrado')
       }
 
-      // Solicitar acesso à câmera
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment', // Câmera traseira
-          width: { ideal: 640 },
-          height: { ideal: 480 }
+      // Criar instância do QrScanner
+      qrScannerRef.current = new QrScanner(
+        videoRef.current,
+        (result) => {
+          console.log('QR Code detectado:', result.data)
+          
+          // Evitar processar o mesmo código repetidamente
+          if (result.data !== lastScannedCode) {
+            setLastScannedCode(result.data)
+            processQRCode(result.data)
+          }
+        },
+        {
+          onDecodeError: (error) => {
+            // Ignorar erros de decodificação (normal quando não há QR code na imagem)
+            console.log('Procurando QR Code...')
+          },
+          highlightScanRegion: true,
+          highlightCodeOutline: true,
+          preferredCamera: 'environment' // Câmera traseira
         }
-      })
+      )
 
-      // Conectar stream ao elemento de vídeo
-      videoRef.current.srcObject = stream
-      await videoRef.current.play()
-
-      console.log('Câmera iniciada com sucesso')
+      // Iniciar o scanner
+      await qrScannerRef.current.start()
+      console.log('Scanner de QR Code iniciado com sucesso')
       
     } catch (error) {
       console.error('Erro ao iniciar câmera:', error)
       setCameraError(error instanceof Error ? error.message : 'Erro ao acessar câmera')
       setIsCameraActive(false)
+      playErrorSound() // Som de erro
       
-      // Parar stream se houver erro
-      if (videoRef.current?.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream
-        stream.getTracks().forEach(track => track.stop())
-        videoRef.current.srcObject = null
+      // Limpar scanner se houver erro
+      if (qrScannerRef.current) {
+        qrScannerRef.current.destroy()
+        qrScannerRef.current = null
       }
     }
   }
@@ -553,23 +634,26 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
   // Parar scanner de câmera
   const stopCameraScanner = () => {
     try {
-      // Parar stream da câmera
-      if (videoRef.current?.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream
-        stream.getTracks().forEach(track => track.stop())
-        videoRef.current.srcObject = null
+      // Parar e destruir o scanner
+      if (qrScannerRef.current) {
+        qrScannerRef.current.stop()
+        qrScannerRef.current.destroy()
+        qrScannerRef.current = null
       }
 
       setIsCameraActive(false)
       setCameraError('')
+      setLastScannedCode('')
     } catch (error) {
       console.error('Erro ao parar câmera:', error)
     }
   }
 
-  // Processar QR Code escaneado
+  // Processar QR Code escaneado - MELHORADO COM SONS
   const processQRCode = async (qrData: string) => {
     try {
+      console.log('Processando QR Code:', qrData)
+      
       // Tentar parsear como JSON
       let guestData
       try {
@@ -603,6 +687,7 @@ Assinatura Digital: ${formData.name || '[NOME]'}`
       
     } catch (error) {
       console.error('Erro ao processar QR Code:', error)
+      playErrorSound() // Som de erro
       alert(error instanceof Error ? error.message : 'Erro ao processar QR Code')
     }
   }
@@ -791,7 +876,7 @@ Vai ser incrível! 🎵`
           </div>
         </div>
 
-        {/* Footer com contatos e admin */}
+        {/* Footer com contatos */}
         <div className="px-4 py-8 border-t border-gray-200/50">
           <div className="max-w-2xl mx-auto text-center">
             <p className="text-gray-600 mb-6 text-lg">Contato e Suporte</p>
@@ -806,27 +891,51 @@ Vai ser incrível! 🎵`
               </a>
             </div>
             
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Button 
-                onClick={() => setCurrentScreen('admin')}
-                variant="outline"
-                size="sm"
-                className="text-gray-600 hover:text-gray-900"
-              >
-                <Settings className="w-4 h-4 mr-2" />
-                Painel Admin
-              </Button>
-              
-              <Button 
-                onClick={() => setCurrentScreen('checkin')}
-                variant="outline"
-                size="sm"
-                className="text-blue-600 hover:text-blue-900 border-blue-200 hover:bg-blue-50"
-              >
-                <Scan className="w-4 h-4 mr-2" />
-                Check-in Portaria
-              </Button>
-            </div>
+            {/* Acesso administrativo via URL ou clique triplo */}
+            {showAdminAccess && (
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Button 
+                  onClick={() => setCurrentScreen('admin')}
+                  variant="outline"
+                  size="sm"
+                  className="text-gray-600 hover:text-gray-900"
+                >
+                  <Settings className="w-4 h-4 mr-2" />
+                  Painel Admin
+                </Button>
+                
+                <Button 
+                  onClick={() => setCurrentScreen('checkin')}
+                  variant="outline"
+                  size="sm"
+                  className="text-blue-600 hover:text-blue-900 border-blue-200 hover:bg-blue-50"
+                >
+                  <Scan className="w-4 h-4 mr-2" />
+                  Check-in Portaria
+                </Button>
+              </div>
+            )}
+
+            {/* Área invisível para ativar acesso administrativo */}
+            <div 
+              className="h-8 w-full cursor-pointer opacity-0"
+              onClick={(e) => {
+                // Detectar clique triplo
+                const now = Date.now()
+                const clickTimes = (e.target as any).clickTimes || []
+                clickTimes.push(now)
+                
+                // Manter apenas os últimos 3 cliques
+                const recentClicks = clickTimes.filter((time: number) => now - time < 1000)
+                ;(e.target as any).clickTimes = recentClicks
+                
+                // Se houver 3 cliques em 1 segundo, mostrar acesso admin
+                if (recentClicks.length >= 3) {
+                  setShowAdminAccess(true)
+                  ;(e.target as any).clickTimes = []
+                }
+              }}
+            />
           </div>
         </div>
       </div>
@@ -1280,6 +1389,14 @@ Vai ser incrível! 🎵`
                 </CardTitle>
                 <div className="flex gap-2">
                   <Button
+                    onClick={() => setSoundEnabled(!soundEnabled)}
+                    variant="outline"
+                    size="sm"
+                    className={soundEnabled ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}
+                  >
+                    {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                  </Button>
+                  <Button
                     onClick={loadGuests}
                     variant="outline"
                     size="sm"
@@ -1350,10 +1467,8 @@ Vai ser incrível! 🎵`
                               muted
                               autoPlay
                             />
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                              <div className="border-2 border-green-400 bg-green-400/20 rounded-lg w-48 h-48 flex items-center justify-center">
-                                <QrCode className="w-8 h-8 text-green-600" />
-                              </div>
+                            <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded text-xs">
+                              🔍 Procurando QR Code...
                             </div>
                           </div>
                         )}
@@ -1393,7 +1508,7 @@ Vai ser incrível! 🎵`
                         <Alert>
                           <AlertCircle className="h-4 w-4" />
                           <AlertDescription>
-                            <strong>Como usar:</strong> Clique em "Iniciar Câmera" e aponte para o QR Code do convidado. Use o campo manual para inserir códigos quando necessário.
+                            <strong>Como usar:</strong> Clique em "Iniciar Câmera" e aponte para o QR Code do convidado. O sistema detectará automaticamente e emitirá sons de confirmação.
                           </AlertDescription>
                         </Alert>
                       </div>
@@ -1712,131 +1827,6 @@ Vai ser incrível! 🎵`
                                   Configurado no código (eventInfo.email)
                                 </p>
                               </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        {/* Configurações de Email */}
-                        <Card>
-                          <CardHeader>
-                            <CardTitle className="text-lg flex items-center gap-2">
-                              <Mail className="w-5 h-5" />
-                              Configurações de Email
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-4">
-                            <Alert>
-                              <AlertCircle className="h-4 w-4" />
-                              <AlertDescription>
-                                <strong>Status do Email:</strong> ✅ API Key configurada no código
-                              </AlertDescription>
-                            </Alert>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <Label>Provedor de Email</Label>
-                                <Input
-                                  value="Resend"
-                                  disabled
-                                  className="mt-1 bg-gray-50"
-                                />
-                              </div>
-                              
-                              <div>
-                                <Label>Email Remetente</Label>
-                                <Input
-                                  value="EscalaMusic <gabriellima.art@gabriellima.art>"
-                                  disabled
-                                  className="mt-1 bg-gray-50"
-                                />
-                              </div>
-                            </div>
-                            
-                            <div>
-                              <Label>API Key do Resend</Label>
-                              <Input
-                                value="re_E4YXbKsU_Gkqu3LkcWeqDaTCqRy1jMjh9"
-                                disabled
-                                className="mt-1 bg-gray-50"
-                                type="password"
-                              />
-                              <p className="text-xs text-gray-500 mt-1">
-                                Configurada diretamente no código da API
-                              </p>
-                            </div>
-
-                            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                              <h4 className="font-semibold text-green-900 mb-2">✅ Email Configurado</h4>
-                              <p className="text-sm text-green-800">
-                                O sistema de email está funcionando com a API key do Resend configurada. 
-                                Os emails são enviados automaticamente quando um convidado é aprovado.
-                              </p>
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        {/* Configurações do Sistema */}
-                        <Card>
-                          <CardHeader>
-                            <CardTitle className="text-lg flex items-center gap-2">
-                              <Shield className="w-5 h-5" />
-                              Configurações do Sistema
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <Label>Senha Admin</Label>
-                                <Input
-                                  value="admin123"
-                                  disabled
-                                  className="mt-1 bg-gray-50"
-                                  type="password"
-                                />
-                                <p className="text-xs text-gray-500 mt-1">
-                                  Configurada no código (handleAdminLogin)
-                                </p>
-                              </div>
-                              
-                              <div>
-                                <Label>Senha Check-in</Label>
-                                <Input
-                                  value="checkin123"
-                                  disabled
-                                  className="mt-1 bg-gray-50"
-                                  type="password"
-                                />
-                                <p className="text-xs text-gray-500 mt-1">
-                                  Configurada no código (handleCheckinLogin)
-                                </p>
-                              </div>
-                            </div>
-
-                            <div>
-                              <Label>Banco de Dados</Label>
-                              <Input
-                                value={process.env.NEXT_PUBLIC_SUPABASE_URL ? 'Supabase - Conectado' : 'Não configurado'}
-                                disabled
-                                className="mt-1 bg-gray-50"
-                              />
-                              <p className="text-xs text-gray-500 mt-1">
-                                {process.env.NEXT_PUBLIC_SUPABASE_URL ? 
-                                  `URL: ${process.env.NEXT_PUBLIC_SUPABASE_URL}` : 
-                                  'Configure NEXT_PUBLIC_SUPABASE_URL no .env.local'
-                                }
-                              </p>
-                            </div>
-
-                            <div>
-                              <Label>Ambiente</Label>
-                              <Input
-                                value={process.env.NODE_ENV || 'development'}
-                                disabled
-                                className="mt-1 bg-gray-50"
-                              />
-                              <p className="text-xs text-gray-500 mt-1">
-                                Ambiente atual de execução
-                              </p>
                             </div>
                           </CardContent>
                         </Card>
