@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
         <title>🎵 Confirmação de Presença – Gravação do EP "Apaixonado Como Nunca"</title>
         <style>
           body {
-            font-family: 'Arial', sans-serif;
+            font-family: Arial, sans-serif;
             line-height: 1.6;
             color: #333;
             max-width: 600px;
@@ -86,23 +86,18 @@ export async function POST(request: NextRequest) {
           .container {
             background: white;
             border-radius: 15px;
-            padding: 40px;
+            padding: 30px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.1);
           }
           .header {
             text-align: center;
             margin-bottom: 30px;
           }
-          .logo {
-            max-width: 200px;
-            height: auto;
-            margin-bottom: 20px;
-          }
           .title {
             color: #2c3e50;
             font-size: 24px;
             font-weight: bold;
-            margin: 0 0 10px 0;
+            margin: 0 0 20px 0;
           }
           .greeting {
             font-size: 18px;
@@ -115,7 +110,7 @@ export async function POST(request: NextRequest) {
             color: #34495e;
           }
           .highlight {
-            background: linear-gradient(120deg, #a8edea 0%, #fed6e3 100%);
+            background: #e8f5e8;
             padding: 15px;
             border-radius: 10px;
             margin: 20px 0;
@@ -171,9 +166,10 @@ export async function POST(request: NextRequest) {
             font-weight: bold;
           }
           .qr-fallback {
-            color: #7f8c8d;
+            color: #e74c3c;
             font-size: 14px;
             margin-top: 10px;
+            font-weight: bold;
           }
           .instructions {
             background: #e8f5e8;
@@ -212,15 +208,12 @@ export async function POST(request: NextRequest) {
             color: #7f8c8d;
             font-style: italic;
           }
-          .emoji {
-            font-size: 20px;
-          }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
-            <img src="https://i.postimg.cc/XvsKmNKW/ESCALA-MUSIC-NOVO-LOGO.png" alt="EscalaMusic Logo" class="logo">
+            <div class="title">🎵 Confirmação de Presença – Gravação do EP "Apaixonado Como Nunca"</div>
           </div>
 
           <div class="greeting">
@@ -228,40 +221,40 @@ export async function POST(request: NextRequest) {
           </div>
 
           <div class="confirmation">
-            Parabéns! Sua presença foi <strong>CONFIRMADA</strong> para a gravação do EP "Apaixonado Como Nunca" <span class="emoji">🎉</span>
+            Parabéns! Sua presença foi <strong>CONFIRMADA</strong> para a gravação do EP "Apaixonado Como Nunca" 🎉
           </div>
 
           <div class="highlight">
-            <span class="emoji">✨</span> Vai ser incrível ter você com a gente nesse momento especial! <span class="emoji">✨</span>
+            ✨ Vai ser incrível ter você com a gente nesse momento especial! ✨
           </div>
 
           <div class="event-details">
-            <h3><span class="emoji">🎬</span> Detalhes do Evento</h3>
+            <h3>🎬 Detalhes do Evento</h3>
             <div class="detail-item">
-              <strong><span class="emoji">📅</span> Data:</strong> 09/10 às 15h
+              <strong>📅 Data:</strong> 09/10 às 15h
             </div>
             <div class="detail-item">
-              <strong><span class="emoji">📍</span> Local:</strong> Prainha Natal – ao lado do Hotel Imirá
+              <strong>📍 Local:</strong> Prainha Natal – ao lado do Hotel Imirá
             </div>
             <div class="detail-item">
-              <strong><span class="emoji">🗺️</span> Endereço:</strong> Av. Senador Dinarte Mariz, Via Costeira, 4077 - B, Natal - RN, 59090-002
+              <strong>🗺️ Endereço:</strong> Av. Senador Dinarte Mariz, Via Costeira, 4077 - B, Natal - RN, 59090-002
             </div>
           </div>
 
           <div class="qr-section">
-            <h3><span class="emoji">📱</span> Seu QR Code de Acesso</h3>
+            <h3>📱 Seu QR Code de Acesso</h3>
             <p>Apresente o código abaixo na entrada do evento.</p>
             <p style="font-size: 14px; color: #7f8c8d;">(Código único e intransferível)</p>
             
             <img src="data:image/png;base64,${qrCodeImage}" alt="QR Code de Acesso" class="qr-code">
             
             <div class="qr-fallback">
-              <strong>⚠️ Caso o QR Code não seja exibido corretamente, clique aqui para visualizar seu código</strong>
+              ⚠️ Caso o QR Code não seja exibido corretamente, clique <a href="data:image/png;base64,${qrCodeImage}" target="_blank" style="color: #e74c3c; text-decoration: underline;">aqui para visualizar seu código</a>
             </div>
           </div>
 
           <div class="instructions">
-            <h4><span class="emoji">📋</span> Instruções Importantes</h4>
+            <h4>📋 Instruções Importantes</h4>
             <ul>
               <li>Chegue com antecedência para facilitar o check-in.</li>
               <li>Apresente este QR Code na entrada.</li>
@@ -273,7 +266,7 @@ export async function POST(request: NextRequest) {
           </div>
 
           <div class="highlight">
-            <span class="emoji">🎵</span> Prepare-se para viver momentos inesquecíveis! <span class="emoji">🎵</span>
+            🎵 Prepare-se para viver momentos inesquecíveis! 🎵
           </div>
 
           <div class="footer">
