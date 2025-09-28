@@ -1,14 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+// Inicializar Resend apenas se a API key estiver disponível
+let resend: Resend | null = null
+
+try {
+  if (process.env.RESEND_API_KEY) {
+    resend = new Resend(process.env.RESEND_API_KEY)
+  }
+} catch (error) {
+  console.error('Erro ao inicializar Resend:', error)
+}
 
 export async function POST(request: NextRequest) {
   try {
     const { to, name, qrCodeData, qrCodeImage, pdfBuffer } = await request.json()
 
     // Verificar se a API key está configurada
-    if (!process.env.RESEND_API_KEY) {
+    if (!process.env.RESEND_API_KEY || !resend) {
       console.error('RESEND_API_KEY não configurada')
       return NextResponse.json(
         { 
@@ -338,4 +347,13 @@ export async function POST(request: NextRequest) {
       }
     )
   }
+}
+
+// Função para verificar se o serviço está configurado
+export async function GET() {
+  return NextResponse.json({
+    status: 'API de email ativa',
+    configured: !!process.env.RESEND_API_KEY,
+    timestamp: new Date().toISOString()
+  })
 }
