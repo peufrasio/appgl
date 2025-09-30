@@ -105,7 +105,7 @@ Importante: Este termo será preenchido automaticamente com seus dados quando vo
         name: formData.name,
         email: formData.email,
         phone: formData.phone,
-        instagram: formData.instagram || null,
+        instagram: formData.instagram || undefined,
         has_companion: formData.hasCompanion,
         image_consent: formData.imageConsent,
         status: 'pending' as const,
