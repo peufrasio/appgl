@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import QRCode from 'qrcode'
-import { supabase, generateEmailTemplate } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -39,9 +39,6 @@ export async function POST(request: NextRequest) {
         light: '#ffffff'
       }
     })
-
-    // Generate email template
-    const emailTemplate = generateEmailTemplate(guest)
 
     // Enhanced email HTML with embedded QR Code image
     const emailHtml = `
@@ -93,11 +90,11 @@ export async function POST(request: NextRequest) {
       </div>
     `
 
-    // Send email using Resend with HTML
+    // Send email using Resend with HTML only (no react-email dependency)
     const { data, error } = await resend.emails.send({
       from: process.env.EMAIL_FROM || 'evento@gabriellima.com',
       to: [guestEmail],
-      subject: emailTemplate.subject,
+      subject: `🎵 Confirmação - EP "Apaixonado Como Nunca" - ${guest.name}`,
       html: emailHtml,
     })
 
